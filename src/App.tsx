@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk"
+import { getCommitment } from './utils/hash'
+import { formatTokenBalance, getFileExtension, formatToMB } from './utils/file'
 import Navbar from './components/Navbar'
 import VaultTable from './components/VaultTable'
 import type { StoredFile } from './components/VaultTable'
@@ -155,18 +157,6 @@ function App() {
     }
   }, [ACTIVE_NET.aptosRpc]);
 
-  // Helper: Calculate SHA-256 commitment of the file
-  const getCommitment = useCallback(async (file: File) => {
-    try {
-      const buffer = await file.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-      return Array.from(new Uint8Array(hashBuffer));
-    } catch (err) {
-      console.error("Commitment generation failed:", err);
-      throw new Error("commitment_generation_failed");
-    }
-  }, []);
-
   // Initialize Aptos SDK client
   const aptos = useMemo(() => {
     try {
@@ -201,13 +191,6 @@ function App() {
   // Handlers
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type, isVisible: true })
-  }
-
-  function formatTokenBalance(value: number, decimals = 4) {
-    if (!value || value === 0) return "0"
-    return Number(value)
-      .toFixed(decimals)
-      .replace(/\.?0+$/, "")
   }
 
   // Helper for authenticated RPC calls
