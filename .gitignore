@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+.env
+.env.local
+.env.*
+
 # Local AI / tools
 .gemini
 
