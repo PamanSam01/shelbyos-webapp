@@ -1,0 +1,43 @@
+/* src/index.css */
+
+/* Base root variables (Shared or Fallback) */
+:root {
+  --mono: 'Courier Prime', 'Courier New', monospace;
+  --hot: #cc0000;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding-bottom: 26px;
+  background-color: #000; /* Fallback */
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 10px;
+  padding: 12px 16px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 680px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}

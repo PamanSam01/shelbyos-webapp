@@ -1,0 +1,60 @@
+/* src/components/StatusBar.css */
+
+.statusbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  padding: 3px 10px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  z-index: 1000;
+  color: var(--text);
+  background: linear-gradient(180deg, #ece9d8 0%, #d8d4c0 100%);
+  border-top: 2px solid #7a96b8;
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+}
+
+.statusbar span {
+  padding: 1px 14px 1px 0;
+  margin-right: 14px;
+  border-right: 1px solid var(--border-mid);
+  white-space: nowrap;
+}
+
+.statusbar span:last-child {
+  border-right: none;
+}
+
+.statusbar-credits {
+  margin-left: auto;
+  padding: 1px 0;
+  white-space: nowrap;
+  border-right: none !important;
+}
+
+.statusbar-credits a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.statusbar-credits a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 680px) {
+  .statusbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 10px;
+    position: relative; /* On mobile, let it flow if needed, or stay fixed? Legacy says fixed but wrap makes it grow */
+  }
+  
+  .statusbar span {
+    padding: 2px 8px 2px 0;
+    margin-right: 8px;
+    border-right: 1px solid var(--border-mid);
+  }
+}

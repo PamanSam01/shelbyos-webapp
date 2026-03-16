@@ -1,0 +1,94 @@
+/* src/components/UploadPanel.css */
+
+.drop-zone {
+  border: 2px dashed var(--border-mid);
+  background: var(--input-bg);
+  text-align: center;
+  padding: 28px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--border-mid);
+  transition: background 0.1s;
+  position: relative;
+}
+
+.drop-zone.dragover {
+  background: #d4d4f8;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.drop-zone input {
+  display: none;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-mid);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.qname {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qsize {
+  color: var(--border-mid);
+  flex-shrink: 0;
+}
+
+.progress95-wrap {
+  background: var(--input-bg);
+  border-top: 2px solid var(--border-dark);
+  border-left: 2px solid var(--border-dark);
+  border-right: 2px solid var(--border-light);
+  border-bottom: 2px solid var(--border-light);
+  height: 16px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress95-bar {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg, var(--accent) 0px, var(--accent) 8px,
+    var(--titlebar2) 8px, var(--titlebar2) 10px
+  );
+  transition: width 0.25s;
+}
+
+.upload-warning {
+  font-size: 10px;
+  color: var(--hot);
+  text-align: center;
+  margin-top: 4px;
+}
+
+.coming-soon-badge {
+  margin-left: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border: 1px solid var(--border-mid);
+  background: #fff0cc;
+  color: #664400;
+  letter-spacing: 0.04em;
+  border-radius: 1px;
+}

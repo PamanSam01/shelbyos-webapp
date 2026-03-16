@@ -1,0 +1,46 @@
+/* src/components/Toast.css */
+
+.toast {
+  position: fixed;
+  bottom: 34px;
+  right: 18px;
+  background: var(--panel);
+  border-top: 2px solid var(--border-light);
+  border-left: 2px solid var(--border-light);
+  border-right: 2px solid var(--border-dark);
+  border-bottom: 2px solid var(--border-dark);
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.3);
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-icon {
+  font-size: 16px;
+}
+
+.toast-success {
+  color: #006600;
+}
+
+.toast-error {
+  color: #cc0000;
+}
+
+.toast-info {
+  color: var(--text);
+}

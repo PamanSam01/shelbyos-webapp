@@ -1,0 +1,49 @@
+/* src/components/WalletModal.css */
+
+.wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wallet-btn {
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 13px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.wallet-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 1px;
+}
+
+.status-connect {
+  background: #d4f0d4;
+  border: 1px solid #006600;
+  color: #004400;
+}
+
+.status-missing {
+  border: 1px solid var(--border-mid);
+  color: var(--border-mid);
+}
+
+.wallet-msg {
+  font-size: 12px;
+  min-height: 16px;
+  margin-top: 4px;
+}

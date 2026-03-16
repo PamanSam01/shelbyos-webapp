@@ -1,0 +1,171 @@
+/* src/themes.css */
+
+/* ════════════════════════════════════════════════
+   THEME: Windows XP (Default)
+   ════════════════════════════════════════════════ */
+body.theme-xp {
+  --bg: #3a6ea8;
+  --panel: #ece9d8;
+  --titlebar: #0a246a;
+  --titlebar2: #a6caf0;
+  --text: #000000;
+  --border-light: #ffffff;
+  --border-dark: #003c74;
+  --border-mid: #7a96b8;
+  --input-bg: #ffffff;
+  --accent: #316ac5;
+  --hot: #cc0000;
+  --selected: #c1d2ee;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3CradialGradient id='a' cx='50%25' cy='40%25' r='70%25'%3E%3Cstop offset='0' stop-color='%235b8dce'/%3E%3Cstop offset='1' stop-color='%23235ba8'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23a)'/%3E%3C/svg%3E");
+  background-size: cover;
+}
+
+body.theme-xp .window {
+  border: 3px solid #003c74;
+  border-radius: 6px 6px 0 0;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.5), inset 0 0 0 1px #a6caf0;
+}
+
+body.theme-xp .titlebar {
+  background: linear-gradient(180deg, #4a88d8 0%, #2255b8 8%, #1a4aaa 50%, #1238a0 92%, #0a246a 100%);
+  color: #ffffff;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  border-radius: 3px 3px 0 0;
+}
+
+body.theme-xp nav {
+  background: linear-gradient(180deg, #2a6ec8 0%, #1a56b0 100%);
+  border-bottom: 3px solid #003c74;
+}
+
+body.theme-xp .statusbar {
+  background: linear-gradient(180deg, #ece9d8 0%, #d8d4c0 100%);
+  border-top: 2px solid #7a96b8;
+}
+
+/* ════════════════════════════════════════════════
+   THEME: Terminal (Matrix)
+   ════════════════════════════════════════════════ */
+body.theme-terminal {
+  --bg: #0d0d0d;
+  --panel: #111111;
+  --titlebar: #0d0d0d;
+  --titlebar2: #0d0d0d;
+  --text: #00ff41;
+  --border-light: #1a3a1a;
+  --border-dark: #001a00;
+  --border-mid: #005500;
+  --input-bg: #000000;
+  --accent: #00ff41;
+  --hot: #ff4444;
+  --selected: #001a00;
+  font-family: 'Courier New', monospace;
+  background-image: none;
+  background-color: #0d0d0d;
+}
+
+body.theme-terminal .window {
+  border: 1px solid #005500;
+  border-radius: 0;
+  box-shadow: 0 0 8px rgba(0,255,65,0.15);
+}
+
+body.theme-terminal .titlebar {
+  background: #0d0d0d;
+  color: #00ff41;
+  border-bottom: 1px solid #005500;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.theme-terminal .titlebar > span:first-child::before {
+  content: '> ';
+}
+
+body.theme-terminal nav {
+  background: #0d0d0d;
+  border-bottom: 1px solid #005500;
+}
+
+body.theme-terminal .btn95 {
+  background: #000000;
+  border: 1px solid #005500;
+  color: #00ff41;
+  border-radius: 0;
+}
+
+body.theme-terminal .input95,
+body.theme-terminal .select95 {
+  background: #000;
+  border: 1px solid #005500;
+  color: #00ff41;
+}
+
+body.theme-terminal .statusbar {
+  background: #0d0d0d;
+  border-top: 1px solid #005500;
+  color: #00aa22;
+}
+
+/* ════════════════════════════════════════════════
+   THEME: Neon Web3
+   ════════════════════════════════════════════════ */
+body.theme-neon {
+  --bg: #050510;
+  --panel: #0e0e1e;
+  --titlebar: #1a0050;
+  --titlebar2: #2d0080;
+  --text: #e8e0ff;
+  --border-light: #7c3aed;
+  --border-dark: #1a0050;
+  --border-mid: #4c1d95;
+  --input-bg: #07071a;
+  --accent: #22d3ee;
+  --hot: #f43f5e;
+  --selected: #1a0050;
+  background-image: none;
+  background-color: #050510;
+}
+
+body.theme-neon .window {
+  border: 1px solid #7c3aed;
+  border-radius: 4px;
+  box-shadow: 0 0 12px rgba(124,58,237,0.4), inset 0 0 0 1px rgba(124,58,237,0.1);
+}
+
+body.theme-neon .titlebar {
+  background: linear-gradient(90deg, #2d0080 0%, #7c3aed 50%, #0ea5e9 100%);
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(255,255,255,0.8);
+  border-bottom: 1px solid #9333ea;
+}
+
+body.theme-neon nav {
+  background: #0a0a1a;
+  border-bottom: 1px solid #7c3aed;
+  box-shadow: 0 2px 16px rgba(124,58,237,0.3);
+}
+
+body.theme-neon .btn95 {
+  background: #0e0e1e;
+  border: 1px solid #7c3aed;
+  color: #a78bfa;
+}
+
+body.theme-neon .statusbar {
+  background: #0a0a1a;
+  border-top: 1px solid #4c1d95;
+  color: #a78bfa;
+}
+
+body.theme-neon .progress95-bar {
+  background: linear-gradient(90deg, #22d3ee, #7c3aed, #22d3ee);
+  background-size: 200% 100%;
+  animation: neonSlide 1.5s linear infinite;
+}
+
+@keyframes neonSlide {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
