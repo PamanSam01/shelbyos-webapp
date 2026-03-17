@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import Modal from './Modal';
-import type { PermissionConfig } from './PermissionModal';
 import './UploadDetailModal.css';
 
 export interface UploadQueueItem {

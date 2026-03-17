@@ -51,7 +51,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({
   };
 
   return (
-    <div className="window">
+    <div className="window animate-entry delay-2">
       <div className="titlebar">
         <span>💾 File Upload</span>
       </div>

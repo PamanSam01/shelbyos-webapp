@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode, useMemo } from 'react';
-import { NETWORKS, NetworkConfig } from '../config/networks';
+import React, { createContext, useContext, useState, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import { NETWORKS } from '../config/networks';
+import type { NetworkConfig } from '../config/networks';
 
 interface NetworkContextType {
   activeNetKey: keyof typeof NETWORKS;

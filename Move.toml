@@ -1,0 +1,7 @@
+[package]
+name = "ShelbyStorage"
+version = "0.0.1"
+
+[addresses]
+my_addr = "0xe5ce920ceb6d6015ee46a83dd992e666369b12bfa9a418d0742768fc1dfaf7b2"
+aptos_framework = "0x1"

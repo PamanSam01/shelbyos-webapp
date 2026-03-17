@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk"
-import { getCommitment } from './utils/hash'
-import { formatTokenBalance, getFileExtension, formatToMB } from './utils/file'
+import { formatTokenBalance } from './utils/file'
 import Navbar from './components/Navbar'
 import VaultTable from './components/VaultTable'
 import type { StoredFile } from './components/VaultTable'
@@ -21,27 +20,27 @@ import type { UploadQueueItem } from './components/UploadDetailModal'
 import FilePreviewModal from './components/FilePreviewModal'
 import AccessDeniedModal from './components/AccessDeniedModal'
 import { NETWORKS } from './config/networks'
-import './App.css'
 import './themes.css'
+import Intro from './components/Intro'
+import UploadTerminal from './components/UploadTerminal'
 
-const API_KEY = import.meta.env.VITE_SHELBY_API_KEY || "";
-
-function isShelbyNet(rpcUrl?: string) {
-  if (!rpcUrl) return false;
-  return rpcUrl.includes("shelby.xyz");
+const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+if (!API_KEY) {
+  console.error("ShelbyNet API key missing. Check .env configuration.");
 }
 
+
 function App() {
-  const { connect, disconnect, account, connected, signAndSubmitTransaction, network } = useWallet()
+  const { connect, disconnect, account, connected, network, signAndSubmitTransaction } = useWallet()
 
   // Theme & Network
   const [theme, setTheme] = useState('theme-xp')
   const [activeNetKey, setActiveNetKey] = useState<keyof typeof NETWORKS>('testnet')
   
-  // Wallet State (Unified for Adapter and Manual)
-  const walletConnected = connected
-  const walletAddress = account?.address?.toString() ?? ""
-  const [manualWalletId, setManualWalletId] = useState<string | null>(null)
+  // Wallet State
+  const [manualWalletId, setManualWalletId] = useState<string | null>(null);
+  const walletConnected = connected || manualWalletId !== null;
+  const walletAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
   
   // Mock balances
   const [aptBalance, setAptBalance] = useState('0.00')
@@ -50,6 +49,7 @@ function App() {
   // UI Controls (Modals)
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false)
   const [isPermModalOpen, setIsPermModalOpen] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
   const [isFundModalOpen, setIsFundModalOpen] = useState(false)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -61,9 +61,19 @@ function App() {
   // Data State
   const [selectedFile, setSelectedFile] = useState<StoredFile | null>(null)
   const [editingPermIndex, setEditingPermIndex] = useState<number | null>(null)
+  const [editingFileId, setEditingFileId] = useState<number | null>(null)
   const [accessDeniedMsg, setAccessDeniedMsg] = useState('')
   const [accessDeniedAction, setAccessDeniedAction] = useState<{ label: string, fn: () => void } | null>(null)
   const [rpcStatus, setRpcStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [showIntro, setShowIntro] = useState(true);
+
+  const [uploadLogs, setUploadLogs] = useState<{tag: string, msg: string}[]>([]);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const addLog = useCallback((tag: string, msg: string) => {
+    setUploadLogs(prev => [...prev, { tag, msg }]);
+  }, []);
   
   const [defaultPerm, setDefaultPerm] = useState<PermissionConfig>({
     type: 'public',
@@ -79,53 +89,160 @@ function App() {
   
   const [toast, setToast] = useState({ message: '', type: 'info' as ToastType, isVisible: false })
 
-  const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.shelbynet;
+  console.log("activeNetKey:", activeNetKey);
+  const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
 
   // Data State - Fixed: Initialized as empty, removed dummy data
   const [files, setFiles] = useState<StoredFile[]>([])
 
   // Helper: Fetch history from Shelby storage API
   const fetchVaultHistory = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!walletAddress || !ACTIVE_NET) {
+      setFiles([]);
+      return;
+    }
 
-    const CURRENT_API_KEY = activeNetKey === "shelbynet"
-      ? import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET
-      : import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    const tryBlockchainFallback = async (addr: string) => {
+      console.log("[Vault] Attempting blockchain fallback (Transaction Scan)...");
+      try {
+        const transactions = await aptos.getAccountTransactions({
+          accountAddress: addr,
+          options: { limit: 50 }
+        });
+
+        const contractAddress = ACTIVE_NET.contract;
+        const blobTxs = transactions.filter((tx: any) => {
+          if (tx.type !== "user_transaction") return false;
+          const payload = tx.payload;
+          return (
+            payload?.function?.startsWith(`${contractAddress}::storage::register_blob`)
+          );
+        });
+
+        console.log(`[Vault] Found ${blobTxs.length} registration transactions on-chain`);
+
+        const fallbackHistory: StoredFile[] = blobTxs.map((tx: any) => {
+          const payload = tx.payload;
+          const args = payload.arguments || [];
+          
+          // Try to extract name from arguments if register_blob_v2
+          // register_blob_v2(name, expiry, commitment, size)
+          let name = "Vault Asset";
+          let size = 0;
+          
+          if (args.length >= 1 && typeof args[0] === 'string') {
+            // Hex string to ASCII if possible
+            try {
+              const hex = args[0].startsWith('0x') ? args[0].slice(2) : args[0];
+              name = new TextDecoder().decode(new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))));
+            } catch {
+              name = "Vault Asset";
+            }
+          }
+          
+          if (args.length >= 4) {
+            size = parseInt(args[3]) || 0;
+          }
+
+          const ext = name.split(".").pop()?.toUpperCase().slice(0, 4) || "BIN";
+          const dateStr = new Date(parseInt(tx.timestamp) / 1000).toISOString();
+
+          return {
+            id: tx.version,
+            name,
+            ext,
+            size,
+            date: dateStr.split("T")[0],
+            time: new Date(parseInt(tx.timestamp) / 1000).toTimeString().slice(0, 5),
+            uploader: addr,
+            status: "stored" as const,
+            vis: "public", // Default to public for on-chain detection unless we find metadata
+            network: ACTIVE_NET.label,
+            cid: name, // We use name as CID fallback
+            txHash: tx.hash
+          };
+        });
+
+        if (fallbackHistory.length > 0) {
+          setFiles(prev => {
+            // Merge: Keep local uploads, but add on-chain ones if missing
+            const existingHashes = new Set(prev.map(f => f.txHash));
+            const newOnes = fallbackHistory.filter(f => !existingHashes.has(f.txHash));
+            return [...prev, ...newOnes];
+          });
+        }
+      } catch (err: any) {
+        console.warn("[Vault] Blockchain fallback failed:", err.message);
+      }
+    };
 
     try {
-      const res = await fetch(
-        `https://api.shelbynet.shelby.xyz/shelby/v1/blobs/${walletAddress}`,
-        {
-          headers: {
-            Authorization: `Bearer ${CURRENT_API_KEY}`
-          }
+      // Normalize address
+      let addr = walletAddress.toLowerCase();
+      if (addr.startsWith("0x")) {
+        const hex = addr.slice(2).padStart(64, '0');
+        addr = "0x" + hex;
+      } else {
+        addr = "0x" + addr.padStart(64, '0');
+      }
+
+      // Try REST API first (Source A)
+      const storageBase = ACTIVE_NET.shelbyRpc;
+      // Following Soobin logic: try with/without /shelby base
+      const historyUrl = `${storageBase}/shelby/v1/blobs/${addr}`;
+      
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      // Use the Soobin API key if we have it or the one from env
+      const useKey = API_KEY || "aptoslabs_8TvZJ1y8YXj_QKYMB9C3GLUmcEMbvtXVscowf3xfwjTTW";
+      if (useKey) {
+        headers["Authorization"] = `Bearer ${useKey}`;
+      }
+      
+      const res = await fetch(historyUrl, { headers }).catch(() => null);
+
+      if (res && res.ok) {
+        const blobs = await res.json().catch(() => []);
+        if (Array.isArray(blobs)) {
+          console.log(`[Vault] Received ${blobs.length} blobs from REST RPC`);
+          const history = blobs.map((blob: any) => {
+            const name = blob.blobName || blob.name || "unknown";
+            const ext = name.split(".").pop()?.toUpperCase().slice(0, 4) || "BIN";
+            const permConfig: PermissionConfig = blob.metadata?.permConfig || { type: 'public', allowlist: [], timelock: '', price: '' };
+
+            return {
+              id: blob.id || Date.now() + Math.random(),
+              name,
+              ext,
+              size: blob.size || 0,
+              date: blob.createdAt ? new Date(blob.createdAt).toISOString().split("T")[0] : "-",
+              time: blob.createdAt ? new Date(blob.createdAt).toTimeString().slice(0, 5) : "-",
+              uploader: walletAddress,
+              status: "stored" as const,
+              vis: (permConfig.type === 'public' ? 'public' : permConfig.type === 'allowlist' ? 'private' : 'encrypted') as any,
+              permConfig,
+              network: ACTIVE_NET.label,
+              cid: blob.blobId || blob.id || "",
+              txHash: blob.txHash || ""
+            };
+          });
+          setFiles(history);
+          return;
         }
-      );
+      }
 
-      if (!res.ok) return;
+      // If REST fails or is empty, try Blockchain Fallback (Source B)
+      await tryBlockchainFallback(addr);
 
-      const blobs = await res.json();
-
-      const history = blobs.map((blob: any) => ({
-        id: blob.id,
-        name: blob.blobName,
-        ext: blob.blobName.split(".").pop()?.toUpperCase() || "BIN",
-        size: blob.size,
-        date: new Date(blob.createdAt).toISOString().split("T")[0],
-        time: new Date(blob.createdAt).toTimeString().slice(0, 5),
-        uploader: walletAddress,
-        status: "stored",
-        vis: "public",
-        network: ACTIVE_NET.label,
-        cid: blob.blobId,
-        txHash: blob.txHash
-      }));
-
-      setFiles(history);
-    } catch (err) {
-      console.error("Failed to fetch Shelby vault history:", err);
+    } catch (err: any) {
+      console.warn("[Vault] Error in history sync:", err?.message);
+      setHistoryError(err?.message || "Failed to sync history");
+    } finally {
+      setIsHistoryLoading(false);
     }
-  }, [walletAddress, ACTIVE_NET.label]);
+  }, [walletAddress, ACTIVE_NET, activeNetKey]);
 
   // Fetch history when wallet connects
   useEffect(() => {
@@ -133,29 +250,6 @@ function App() {
       fetchVaultHistory();
     }
   }, [walletConnected, walletAddress, fetchVaultHistory]);
-
-  // Helper: Fetch current ledger timestamp from Aptos RPC
-  const getLedgerTimeSecs = useCallback(async () => {
-    try {
-      // 🛡️ Ensure we hit the base RPC to get ledger info
-      const res = await fetch(ACTIVE_NET.aptosRpc);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`RPC error: ${text}`);
-      }
-      const data = await res.json();
-      // ledger_timestamp is in microseconds
-      if (!data.ledger_timestamp) throw new Error("ledger_timestamp missing in RPC response");
-      
-      const ledgerSecs = Math.floor(Number(data.ledger_timestamp) / 1000000);
-      console.log("Verified Ledger Secs from RPC:", ledgerSecs);
-      return ledgerSecs;
-    } catch (err) {
-      console.error("Critical: Failed to sync with blockchain time:", err);
-      showToast("Blockchain time sync failed. Check your connection.", "error");
-      throw err;
-    }
-  }, [ACTIVE_NET.aptosRpc]);
 
   // Initialize Aptos SDK client
   const aptos = useMemo(() => {
@@ -212,21 +306,9 @@ function App() {
     const rpc = ACTIVE_NET?.aptosRpc;
     if (!rpc) return;
 
-    // Step 1: Fix Wallet Network Detection using network.name
-    const walletNetwork = network?.name || "";
-    const isWalletShelbyNet = walletNetwork.toLowerCase().includes("shelby");
-    
-    const isMismatch = (activeNetKey === "shelbynet" && !isWalletShelbyNet) || 
-                       (activeNetKey === "testnet" && isWalletShelbyNet);
-
-    if (walletConnected && isMismatch) {
-      setRpcStatus("error");
-      return;
-    }
-
     try {
-      // Step 2: Fix RPC Health Check by pinging a valid endpoint
-      const res = await rpcFetch(`${rpc}/accounts/0x1`).catch(() => null);
+      // Step 2: Fix RPC Health Check by pinging standard Aptos health point without Auth headers
+      const res = await fetch(`${rpc}/-/healthy`).catch(() => null);
       setRpcStatus(res && res.ok ? "ok" : "error");
     } catch {
       setRpcStatus("error");
@@ -234,80 +316,38 @@ function App() {
   }, [ACTIVE_NET?.aptosRpc, rpcFetch, network?.name, activeNetKey, walletConnected]);
 
   const fetchBalances = useCallback(async () => {
-    // Step 3: Add RPC Guards
     if (!walletConnected || !walletAddress || !ACTIVE_NET) return;
 
-    const walletNetwork = network?.name || "";
-    const isWalletShelbyNet = walletNetwork.toLowerCase().includes("shelby");
-
-    const isMismatch = (activeNetKey === "shelbynet" && !isWalletShelbyNet) || 
-                       (activeNetKey === "testnet" && isWalletShelbyNet);
-    
-    if (isMismatch) {
-      console.warn("Network mismatch between wallet and UI. Skipping RPC call.");
-      return;
-    }
-
     try {
-      const res = await rpcFetch(
-        `${ACTIVE_NET.aptosRpc}/accounts/${walletAddress}/resources`
-      );
+      // Use rpcFetch so Authorization header is injected for ShelbyNet automatically
+      const url = `${ACTIVE_NET.aptosRpc}/accounts/${walletAddress}/resources`;
+      const res = await rpcFetch(url).catch(() => null);
 
-      // Step 5: Prevent Blank White Screen - check response.ok
-      if (!res.ok) {
-        if (res.status === 404) {
-          setAptBalance("0");
-          setShelbyBalance("0");
-        }
-        return;
-      }
-
-      const resources = await res.json();
-
-      if (!Array.isArray(resources)) {
+      if (!res || !res.ok) {
         setAptBalance("0");
         setShelbyBalance("0");
         return;
       }
 
-      // Detect APT balance using exact type matching
+      const resources: any[] = await res.json();
+
+      // Detect APT balance
       const aptStore = resources.find(
         (r: any) => r.type === "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>"
       );
-
-      if (!aptStore) {
-        setAptBalance("0");
-        
-        // Step 3: Optional fallback query to confirm account existence
-        try {
-          const accRes = await rpcFetch(`${ACTIVE_NET.aptosRpc}/accounts/${walletAddress}`);
-          if (accRes.ok) {
-            const accData = await accRes.json();
-            if (accData?.sequence_number) {
-              console.log("Account confirmed on-chain but no CoinStore resource found yet.");
-            }
-          }
-        } catch (err) {
-          console.error("Fallback account query failed:", err);
-        }
-
-        setShelbyBalance("0");
-        return;
-      }
-
-      if (aptStore.data?.coin?.value) {
+      if (aptStore?.data?.coin?.value) {
         const apt = Number(aptStore.data.coin.value) / 1e8;
         setAptBalance(formatTokenBalance(apt));
       } else {
         setAptBalance("0");
       }
 
+      // Detect ShelbyUSD balance — searches for any CoinStore with "shelby" in the type
       const shelbyStore = resources.find(
         (r: any) =>
-          r.type?.includes("CoinStore") &&
-          r.type?.toLowerCase().includes("shelby")
+          r.type.includes("CoinStore") &&
+          r.type.toLowerCase().includes("shelby")
       );
-
       if (shelbyStore?.data?.coin?.value) {
         const susd = Number(shelbyStore.data.coin.value) / 1e6;
         setShelbyBalance(formatTokenBalance(susd, 2));
@@ -315,15 +355,48 @@ function App() {
         setShelbyBalance("0");
       }
 
-    } catch (error) {
-      console.error("ShelbyOS balance detection error:", error);
+    } catch (error: any) {
+      console.warn("Balance fetch error:", error?.message || error);
+      // Fallback cleanly — no blank screens
+      setAptBalance("0");
+      setShelbyBalance("0");
     }
-  }, [walletConnected, walletAddress, network?.name, activeNetKey, ACTIVE_NET, rpcFetch]);
+  }, [walletConnected, walletAddress, ACTIVE_NET, rpcFetch]);
 
   // Side Effects
   useEffect(() => {
     document.body.className = theme;
   }, [theme]);
+
+  // Auto-connect Martian on page load
+  useEffect(() => {
+    let attempts = 0;
+    let interval: ReturnType<typeof setInterval>;
+
+    const autoConnectMartian = async () => {
+      if (localStorage.getItem('shelbyos_martian_connected') === 'true') {
+        if ((window as any).martian) {
+          clearInterval(interval);
+          try {
+            const response = await (window as any).martian.connect();
+            if (response?.address || response?.account?.address) {
+              setManualWalletId('Martian');
+            }
+          } catch (err) {
+            localStorage.removeItem('shelbyos_martian_connected');
+          }
+        } else {
+          attempts++;
+          if (attempts > 10) clearInterval(interval); // give up after 5 seconds
+        }
+      } else {
+         clearInterval(interval);
+      }
+    };
+    
+    interval = setInterval(autoConnectMartian, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (walletConnected && walletAddress) {
@@ -336,46 +409,68 @@ function App() {
   }, [activeNetKey, walletConnected, checkRpcHealth]);
 
   const handleWalletSelect = async (walletName: string) => {
+    // Prevent double-click
+    if (isConnecting) return;
+    setIsConnecting(true);
+    setIsWalletModalOpen(false);
+
     try {
-      setIsWalletModalOpen(false);
-      
+      showToast(`Connecting to ${walletName}…`, 'info');
+
       if (walletName === 'Martian') {
         if (!(window as any).martian) {
           window.open('https://martianwallet.xyz', '_blank');
           showToast('Martian not detected. Opening install page…', 'error');
           return;
         }
-        showToast('Connecting to Martian...', 'info');
-        const resp = await (window as any).martian.connect();
-        const address = resp?.address?.toString() || resp?.account?.address?.toString();
-        if (address) {
+        const response = await (window as any).martian.connect();
+        if (response?.address || response?.account?.address) {
           setManualWalletId('Martian');
+          localStorage.setItem('shelbyos_martian_connected', 'true');
           showToast('Martian connected ✓', 'success');
+        } else {
+          showToast('Martian: no address returned', 'error');
         }
-      } else if (walletName === 'Pontem') {
-        setManualWalletId(null);
-        await connect("Pontem" as any);
-        showToast("Pontem connected ✓", "success");
       } else {
-        // Use adapter for others (e.g. Petra)
+        // Petra, Google (Keyless), etc. — standard adapter
         setManualWalletId(null);
-        await connect(walletName as any);
-        showToast(`${walletName} connected ✓`, "success");
+        try {
+          await connect(walletName as any);
+          showToast(`${walletName} connected ✓`, 'success');
+        } catch (connErr: any) {
+          const msg: string = connErr?.message || String(connErr);
+          // COOP / cross-origin popup errors are non-fatal for Google Keyless
+          const isCoop = msg.includes('Cross-Origin') || msg.includes('window.closed') || msg.includes('COOP');
+          if (isCoop) {
+            // Popup may still succeed asynchronously — just warn, don't crash
+            console.warn('COOP warning (non-fatal):', msg);
+            showToast('Waiting for Google sign-in… (popup may be blocked)', 'info');
+          } else if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
+            showToast('Connection cancelled', 'info');
+          } else {
+            showToast(`Connection failed: ${msg.slice(0, 60)}`, 'error');
+          }
+        }
       }
     } catch (err: any) {
-      console.error(err);
-      showToast(err.message?.includes('rejected') ? 'Connection cancelled' : "Wallet connection failed", "error");
+      // Top-level safety net — prevent any blank screen
+      console.error('handleWalletSelect unexpected error:', err);
+      showToast('Wallet connection error. Please try again.', 'error');
+    } finally {
+      setIsConnecting(false);
     }
   }
 
   const handleWalletDisconnect = async () => {
     try {
       if (manualWalletId === 'Martian') {
-        await (window as any).martian.disconnect();
+        await (window as any).martian?.disconnect();
         setManualWalletId(null);
+        localStorage.removeItem('shelbyos_martian_connected');
       } else {
         await disconnect();
       }
+      setFiles([]);
       showToast('Wallet disconnected', 'info');
     } catch (err: any) {
       showToast(`Failed to disconnect: ${err.message}`, 'error');
@@ -383,7 +478,21 @@ function App() {
   }
 
   const handleApplyPermissions = (config: PermissionConfig) => {
-    if (editingPermIndex !== null && uploadQueue[editingPermIndex]) {
+    if (editingFileId !== null) {
+      // Modifying an existing file in the vault
+      setFiles(prev => prev.map(f => {
+        if (f.id === editingFileId) {
+          return {
+            ...f,
+            permConfig: config,
+            vis: config.type === 'public' ? 'public' : config.type === 'allowlist' ? 'private' : 'encrypted'
+          };
+        }
+        return f;
+      }));
+      showToast('Permissions updated for file ✓', 'success');
+      setEditingFileId(null);
+    } else if (editingPermIndex !== null && uploadQueue[editingPermIndex]) {
       const newQueue = [...uploadQueue];
       newQueue[editingPermIndex] = {
         ...newQueue[editingPermIndex],
@@ -406,6 +515,7 @@ function App() {
     }
     setIsPermModalOpen(false);
     setEditingPermIndex(null);
+    setEditingFileId(null);
     if (returnToUpload) {
       setIsUploadDetailModalOpen(true);
       setReturnToUpload(false);
@@ -427,242 +537,107 @@ function App() {
   }
 
   async function uploadToShelby(file: File, account: string) {
-    const STORAGE_API = "https://api.shelbynet.shelby.xyz";
-    const API_KEY = activeNetKey === "shelbynet"
-      ? import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET
-      : import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+    // API key: ShelbyNet requires one, Testnet public endpoint does not
+    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+    const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET; // optional
+    const isOnShelbyNet = activeNetKey === "shelbynet";
 
-    // 🛡️ API Key Guard
-    if (!API_KEY) {
-      console.warn("Shelby API key missing");
-      showToast("Storage API key not configured", "error");
-      return { success: false, error: "Missing API key" };
+    // Only block upload on ShelbyNet if key is missing
+    if (isOnShelbyNet && !SHELBYNET_KEY) {
+      showToast("ShelbyNet API key not configured", "error");
+      return { success: false, error: "Missing ShelbyNet API key" };
     }
 
-    // 🛡️ Contract Configuration Guard
     if (!ACTIVE_NET?.contract) {
-      console.error("Shelby contract missing");
       showToast("Storage contract configuration missing", "error");
       return { success: false, error: "contract_missing" };
     }
 
+    if (!walletConnected || !walletAddress || !ACTIVE_NET) {
+      return { success: false, error: "wallet_not_initialized" };
+    }
+
     try {
-      // 🛡️ Context Guard: Ensure session is valid
-      if (!walletConnected || !walletAddress || !ACTIVE_NET) {
-        console.warn("Wallet or Network context missing.");
-        return { success: false, error: "wallet_not_initialized" };
-      }
+      showToast(`Encoding ${file.name}...`, "info");
+      addLog('PROC', `Generating erasure coding for ${file.name}...`);
+      const {
+        generateCommitments,
+        createDefaultErasureCodingProvider,
+        ShelbyBlobClient,
+        ShelbyClient,
+        expectedTotalChunksets,
+      } = await import("@shelby-protocol/sdk/browser");
 
-      // 1️⃣ Sync with Blockchain Ledger Time
-      const ledgerSecs = await getLedgerTimeSecs();
-      const expirationSecs = ledgerSecs + 300; // 5 min TTL
-      const creationTimeUs = (ledgerSecs * 1000000).toString();
+      const provider = await createDefaultErasureCodingProvider();
+      const data = new Uint8Array(await file.arrayBuffer());
+      const commitments = await generateCommitments(provider, data);
 
-      // 2️⃣ Generate SHA-256 Commitment and Chunksets
-      const commitment = await getCommitment(file);
-      const chunksets = Math.ceil(file.size / (4 * 1024 * 1024));
-
-      // 3️⃣ Build Transaction Data
-      const txData = {
-        function: `${ACTIVE_NET.contract}::blob_metadata::register_blob`,
-        typeArguments: [],
-        functionArguments: [
-          file.name,                                     // 1. name (String)
-          creationTimeUs,                                // 2. creation_time_us (u64)
-          commitment,                                    // 3. commitment (vector<u8>)
-          chunksets,                                     // 4. chunksets (u32)
-          file.size.toString(),                         // 5. size (u64)
-          0,                                            // 6. tier (u8)
-          0                                             // 7. encoding (u8)
-        ]
-      };
-
-      console.log("Ledger:", ledgerSecs);
-      console.log("Expiration:", expirationSecs);
-      console.log("TTL:", expirationSecs - ledgerSecs);
-      console.log("Commitment length:", commitment.length);
-      console.log("Chunksets:", chunksets);
-      console.log("Payload:", txData);
-
-      let txResp: any;
-
-      // 4️⃣ Build Raw Transaction using Aptos SDK
-      // This ensures expirationTimestampSecs is embedded in the signed bytes
-      try {
-        console.log("Building raw transaction via SDK...");
-        
-        const builtTx = await aptos.transaction.build.simple({
-          sender: walletAddress as any,
-          data: {
-            function: txData.function,
-            typeArguments: txData.typeArguments,
-            functionArguments: txData.functionArguments
-          },
-          options: {
-            expirationTimestampSecs: expirationSecs
-          }
-        });
-
-        console.log("Transaction built successfully:", builtTx);
-
-        // 5️⃣ Trigger wallet approval with built transaction
-        console.log("Triggering wallet approval flow...");
-
-        // Handle manual Martian/Pontem vs standard adapter
-        if (manualWalletId === 'Martian' && (window as any).martian) {
-          txResp = await (window as any).martian.signAndSubmitTransaction({
-            type: 'entry_function_payload',
-            function: txData.function,
-            type_arguments: txData.typeArguments,
-            arguments: txData.functionArguments,
-            expirationTimestampSecs: expirationSecs
-          });
-        } else if (manualWalletId === 'Pontem') {
-          const provider = (window as any).pontem || (window as any).aptos;
-          if (provider) {
-            txResp = await provider.signAndSubmitTransaction({
-              type: 'entry_function_payload',
-              function: txData.function,
-              type_arguments: txData.typeArguments,
-              arguments: txData.functionArguments
-            }, {
-              expirationTimestampSecs: expirationSecs
-            });
-          }
-        } else {
-          // Official Adapter Call (Petra)
-          // Fix: Use the official 'data' payload format. Do NOT pass built transaction objects.
-          txResp = await signAndSubmitTransaction({
-            data: {
-              function: txData.function as `${string}::${string}::${string}`,
-              typeArguments: [],
-              functionArguments: txData.functionArguments
-            },
-            options: {
-              expirationTimestampSecs: expirationSecs
-            }
-          });
-        }
-
-        if (!txResp) throw new Error("transaction_cancelled");
-        console.log("Wallet Transaction Result:", txResp);
-
-      } catch (err: any) {
-        console.error("Wallet transaction failed:", err);
-        const errorMsg = err?.message?.toLowerCase() || "";
-        if (errorMsg.includes("rejected") || errorMsg.includes("user rejected") || errorMsg.includes("cancelled")) {
-          showToast("Transaction rejected by wallet", "error");
-          return { success: false, error: "wallet_rejected" };
-        }
-        showToast("Transaction simulation failed", "error");
-        return { success: false, error: err.message || "transaction_failed" };
-      }
-
-      const txHash = txResp?.hash || txResp?.result?.hash || txResp;
-      if (!txHash) throw new Error("Transaction hash not found");
-
-      // 6️⃣ Wait for transaction confirmation
-      console.log("Waiting for L1 registration confirmation...");
-      let confirmed = false;
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const res = await fetch(`${ACTIVE_NET.aptosRpc}/transactions/by_hash/${txHash}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success || data.vm_status === 'Executed successfully') {
-              confirmed = true;
-              console.log("Blob registered on L1 ✓");
-              break;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn("Retrying Aptos RPC lookup...", fetchErr);
-        }
-      }
-
-      if (!confirmed) throw new Error("Transaction confirmation timeout");
-
-      // 7️⃣ Initialize Shelby Multipart Upload
-      console.log("Initializing multipart upload...");
-      const PART_SIZE = 5242880; // 5MB
-      
-      const initRes = await fetch(`${STORAGE_API}/shelby/v1/multipart-uploads`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          rawAccount: account,
-          rawBlobName: file.name,
-          rawPartSize: PART_SIZE
-        })
+      showToast("Waiting for wallet approval...", "info");
+      addLog('AUTH', 'Awaiting wallet signature for contract transaction...');
+      const payload = ShelbyBlobClient.createRegisterBlobPayload({
+        account: account as any,
+        blobName: file.name,
+        blobMerkleRoot: commitments.blob_merkle_root,
+        numChunksets: expectedTotalChunksets(commitments.raw_data_size),
+        expirationMicros: (Date.now() + 1000 * 60 * 60 * 24 * 30) * 1000,
+        blobSize: commitments.raw_data_size,
+        encoding: 0,
       });
 
-      if (!initRes.ok) {
-        const text = await initRes.text();
-        throw new Error(`Initialization failed: ${text}`);
-      }
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error("Transaction hash not found after submission");
 
-      const { uploadId, presignedUrls } = await initRes.json();
+      showToast("Confirming on-chain registration...", "info");
+      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
+      await aptos.waitForTransaction({ transactionHash: txHash });
+      console.log("Blob registered on-chain:", txHash);
 
-      // 8️⃣ Upload File Chunks
-      console.log("Uploading file parts...");
-      for (let i = 0; i < presignedUrls.length; i++) {
-        const start = i * PART_SIZE;
-        const end = Math.min(start + PART_SIZE, file.size);
-        const chunk = file.slice(start, end);
+      showToast("Uploading file to Shelby network...", "info");
+      addLog('SYNC', `Streaming raw data to Decentralized Vault Nodes...`);
+      const { Network } = await import("@aptos-labs/ts-sdk");
 
-        const partRes = await fetch(presignedUrls[i], {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: await chunk.arrayBuffer()
-        });
+      // Only pass apiKey for the network that requires auth
+      const shelbyClient = isOnShelbyNet
+        ? new ShelbyClient({
+            network: Network.SHELBYNET,
+            apiKey: SHELBYNET_KEY,
+            fullnode: ACTIVE_NET.aptosRpc,
+            shelbynode: ACTIVE_NET.shelbyRpc,
+          } as any)
+        : TESTNET_KEY
+        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
+        : new ShelbyClient({ network: Network.TESTNET } as any);
 
-        if (!partRes.ok) {
-          const text = await partRes.text();
-          throw new Error(`Part ${i} upload failed: ${text}`);
-        }
-      }
-
-      // 9️⃣ Complete Multipart Upload
-      console.log("Completing multipart upload...");
-      const completeRes = await fetch(`${STORAGE_API}/shelby/v1/multipart-uploads/${uploadId}/complete`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          rawAccount: account,
-          rawBlobName: file.name
-        })
+      await shelbyClient.rpc.putBlob({
+        account: account as any,
+        blobName: file.name,
+        blobData: new Uint8Array(await file.arrayBuffer()),
       });
 
-      if (!completeRes.ok) {
-        const text = await completeRes.text();
-        throw new Error(`Completion failed: ${text}`);
-      }
-
-      const { blobId } = await completeRes.json();
-      console.log("Blob upload success ✓");
-
-      return { success: true, blobId, txHash };
+      console.log("Blob uploaded to Shelby RPC");
+      addLog('DONE', `${file.name} successfully encrypted and stored.`);
+      return { success: true, blobId: file.name, txHash };
 
     } catch (err: any) {
       console.error("Shelby upload pipeline error:", err);
-      showToast("Upload failed. Please retry.", "error");
-
-      return {
-        success: false,
-        error: err?.message || "upload_failed"
-      };
+      const msg = err?.message || "upload_failed";
+      if (msg.includes("rejected") || msg.includes("cancel") || msg.includes("User denied")) {
+        showToast("Upload cancelled by user", "info");
+        addLog('ERR ', `Upload cancelled by user.`);
+      } else {
+        showToast(`Upload failed: ${msg.slice(0, 80)}`, "error");
+        addLog('ERR ', `Exception: ${msg.slice(0, 50)}`);
+      }
+      return { success: false, error: msg };
     }
   }
 
+
   const handleUploadAll = async () => {
-    if (uploadQueue.length === 0 || isUploading) return;
+    // Prevent concurrent calls
+    if (isUploading) return;
+    if (uploadQueue.length === 0) return;
     
     if (!walletConnected || !walletAddress) {
       showToast('⚠ Connect a wallet first', 'error');
@@ -676,6 +651,9 @@ function App() {
 
     setIsUploading(true);
     setOverallProgress(0);
+    setShowTerminal(true);
+    setUploadLogs([]);
+    addLog('INIT', `Initiating batch upload sequence for ${readyItems.length} file(s)...`);
     const total = readyItems.length;
     let done = 0;
 
@@ -715,7 +693,8 @@ function App() {
         setOverallProgress(Math.round((done / total) * 100));
         
         // Refresh full history from Shelby API after successful upload
-        await fetchVaultHistory();
+        // Added small timeout to allow RPC/Indexer to catch up
+        setTimeout(() => fetchVaultHistory(), 1000);
       } else {
         item.status = 'ready';
         showToast(`Upload failed: ${item.file.name}`, 'error');
@@ -724,6 +703,7 @@ function App() {
     }
 
     setIsUploading(false);
+    addLog('DONE', `Batch sequence completed. ${done}/${total} successful.`);
     setStatusLine(`✓ ${done} file${done !== 1 ? 's' : ''} uploaded to Shelby`);
     if (done > 0) showToast(`${done} file${done !== 1 ? 's' : ''} uploaded successfully ✓`, 'success');
     
@@ -829,6 +809,10 @@ function App() {
   }
 
   // 🛡️ Global UI Safety Guards
+  if (showIntro) {
+    return <Intro onComplete={() => setShowIntro(false)} />;
+  }
+
   if (!ACTIVE_NET) {
     return (
       <div style={{ padding: 20, fontFamily: 'Tahoma', background: '#ece9d8', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -889,9 +873,20 @@ function App() {
         <div className="layout">
           <VaultTable 
             files={files} 
+            isLoading={isHistoryLoading}
+            error={historyError}
+            walletConnected={walletConnected}
+            onConnectWallet={() => setIsWalletModalOpen(true)}
             onCopyLink={handleShowDetails}
             onPreview={handlePreviewFile}
             onDelete={(id) => setFiles(prev => prev.filter(f => f.id !== id))}
+            onManagePermission={(id) => {
+              const file = files.find(f => f.id === id);
+              if (file) {
+                setEditingFileId(id);
+                setIsPermModalOpen(true);
+              }
+            }}
           />
           <div className="right-col">
             <UploadPanel 
@@ -903,7 +898,7 @@ function App() {
               onUpload={() => setIsUploadDetailModalOpen(true)}
             />
             
-            <div className="window" style={{ marginTop: '10px' }}>
+            <div className="window animate-entry delay-3" style={{ marginTop: '10px' }}>
               <div className="titlebar">
                 <span>🛠️ Actions</span>
               </div>
@@ -951,8 +946,9 @@ function App() {
 
         <WalletModal 
           isOpen={isWalletModalOpen}
-          onClose={() => setIsWalletModalOpen(false)}
+          onClose={() => !isConnecting && setIsWalletModalOpen(false)}
           onSelectWallet={handleWalletSelect}
+          isConnecting={isConnecting}
         />
 
         <PermissionModal 
@@ -960,13 +956,20 @@ function App() {
           onClose={() => {
             setIsPermModalOpen(false);
             setEditingPermIndex(null);
+            setEditingFileId(null);
             if (returnToUpload) {
               setIsUploadDetailModalOpen(true);
               setReturnToUpload(false);
             }
           }}
           onApply={handleApplyPermissions}
-          initialConfig={(editingPermIndex !== null && uploadQueue[editingPermIndex]) ? uploadQueue[editingPermIndex].permConfig : defaultPerm}
+          initialConfig={
+            (editingFileId !== null) 
+              ? files.find(f => f.id === editingFileId)?.permConfig 
+              : (editingPermIndex !== null && uploadQueue[editingPermIndex]) 
+                ? uploadQueue[editingPermIndex].permConfig 
+                : defaultPerm
+          }
         />
 
         <UploadDetailModal 
@@ -1045,6 +1048,12 @@ function App() {
           onConfirm={accessDeniedAction?.fn}
         />
 
+        <UploadTerminal 
+          isVisible={showTerminal} 
+          logs={uploadLogs} 
+          onClose={() => setShowTerminal(false)} 
+        />
+
         <Toast 
           message={toast.message} 
           type={toast.type} 
@@ -1070,3 +1079,5 @@ function App() {
 }
 
 export default App
+// submitTransaction removed: now using signAndSubmitTransaction directly for adapter wallets
+

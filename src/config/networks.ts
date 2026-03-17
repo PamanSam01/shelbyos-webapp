@@ -26,7 +26,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     aptosRpc: "https://api.shelbynet.shelby.xyz/v1",
     shelbyRpc: "https://api.shelbynet.shelby.xyz",
     indexer: "https://api.shelbynet.shelby.xyz/v1/graphql",
-    contract: "0x85fdb9a176ab8ef1d9d9c1b60d60b3924f0800ac1de1cc2085fb0b8bb4988e6a",
+    contract: "0xe5ce920ceb6d6015ee46a83dd992e666369b12bfa9a418d0742768fc1dfaf7b2",
     faucet: "https://faucet.shelbynet.shelby.xyz/mint",
   }
 };

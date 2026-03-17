@@ -165,6 +165,16 @@ tbody tr.selected td {
   color: #000;
 }
 
+.perm-pill.interactive {
+  cursor: pointer;
+  transition: filter 0.1s;
+}
+
+.perm-pill.interactive:hover {
+  filter: brightness(0.9);
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.1);
+}
+
 .perm-pill.perm-public { background: #d4f0d4; border-color: #006600; color: #004400; }
 .perm-pill.perm-allowlist { background: #d4d4f8; border-color: var(--accent); color: #222288; }
 .perm-pill.perm-timelock { background: #fff0cc; border-color: #996600; color: #664400; }
@@ -200,6 +210,15 @@ tbody tr.selected td {
   font-size: 40px;
   display: block;
   margin-bottom: 8px;
+}
+
+.empty-icon.rotating {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .tip {

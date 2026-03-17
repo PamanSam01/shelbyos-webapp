@@ -18,6 +18,16 @@ dist-ssr
 
 # Local AI / tools
 .gemini
+.agents/
+
+# Temporary / Test files
+*.py
+*.pyc
+test_*.js
+build-errors.txt
+out.txt
+build/
+sources/
 
 # Editor directories and files
 .vscode/*

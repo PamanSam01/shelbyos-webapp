@@ -27,6 +27,11 @@ interface VaultTableProps {
   onCopyLink?: (id: number) => void;
   onDownload?: (id: number) => void;
   onDelete?: (id: number) => void;
+  onManagePermission?: (id: number) => void;
+  isLoading?: boolean;
+  error?: string | null;
+  walletConnected?: boolean;
+  onConnectWallet?: () => void;
 }
 
 const VaultTable: React.FC<VaultTableProps> = ({
@@ -36,6 +41,11 @@ const VaultTable: React.FC<VaultTableProps> = ({
   onCopyLink,
   onDownload,
   onDelete,
+  onManagePermission,
+  isLoading,
+  error,
+  walletConnected,
+  onConnectWallet,
 }) => {
   const [searchQuery, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -79,7 +89,7 @@ const VaultTable: React.FC<VaultTableProps> = ({
   };
 
   return (
-    <div className="window" id="vaultWindow">
+    <div className="window animate-entry delay-1" id="vaultWindow">
       <div className="titlebar">
         <span>📂 ShelbyVault — Upload History</span>
         <span id="statLabel" style={{ fontWeight: 400, fontSize: '12px' }}>
@@ -107,7 +117,26 @@ const VaultTable: React.FC<VaultTableProps> = ({
         </div>
 
         <div className="table-wrap">
-          {files.length === 0 ? (
+          {!walletConnected ? (
+            <div className="empty-vault">
+              <span className="empty-icon">🔌</span>
+              <strong>Wallet not connected</strong><br/>
+              Connect your wallet to view your upload history.<br/><br/>
+              <button className="btn95" onClick={onConnectWallet}>Connect Wallet</button>
+            </div>
+          ) : isLoading ? (
+            <div className="empty-vault">
+              <span className="empty-icon rotating">⏳</span>
+              <strong>Syncing with Shelby blockchain...</strong><br/>
+              Fetching your upload history.
+            </div>
+          ) : error ? (
+            <div className="empty-vault">
+              <span className="empty-icon">⚠️</span>
+              <strong style={{ color: 'var(--hot)' }}>RPC Error</strong><br/>
+              {error}
+            </div>
+          ) : files.length === 0 ? (
             <div className="empty-vault">
               <span className="empty-icon">🗄️</span>
               <strong>Vault is empty</strong><br/>
@@ -160,7 +189,13 @@ const VaultTable: React.FC<VaultTableProps> = ({
                         <span className="ext-icon" style={{ background: extColor(s.ext) }}>{s.ext.slice(0, 2)}</span>
                         {s.name}
                         {s.vis === 'public' && s.status === 'stored' && <span className="hot-badge">HOT</span>}
-                        <span className={`perm-pill ${pClass}`} title={pLabel}>{pIcon} {pLabel}</span>
+                        <span 
+                          className={`perm-pill interactive ${pClass}`} 
+                          title={`Change permissions for ${s.name}`}
+                          onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id); }}
+                        >
+                          {pIcon} {pLabel}
+                        </span>
                         {s.network && (
                           <span style={{ fontSize: '8px', padding: '1px 4px', background: 'var(--panel)', border: '1px solid var(--border-mid)', marginLeft: '3px', whiteSpace: 'nowrap' }}>
                             {s.network}
@@ -193,6 +228,10 @@ const VaultTable: React.FC<VaultTableProps> = ({
                         <span className="tip">
                           <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button>
                           <span className="tiptext">Download file</span>
+                        </span>
+                        <span className="tip">
+                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id); }}>🔒</button>
+                          <span className="tiptext">Manage Permissions</span>
                         </span>
                         <span className="tip">
                           <button className="icon-btn95 del" onClick={(e) => { e.stopPropagation(); onDelete?.(s.id); }}>DEL</button>

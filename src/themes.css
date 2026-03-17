@@ -5,9 +5,9 @@
    ════════════════════════════════════════════════ */
 body.theme-xp {
   --bg: #3a6ea8;
-  --panel: #ece9d8;
-  --titlebar: #0a246a;
-  --titlebar2: #a6caf0;
+  --panel: rgba(236, 233, 216, 0.88);
+  --titlebar: rgba(10, 36, 106, 0.95);
+  --titlebar2: rgba(166, 202, 240, 0.95);
   --text: #000000;
   --border-light: #ffffff;
   --border-dark: #003c74;
@@ -21,9 +21,11 @@ body.theme-xp {
 }
 
 body.theme-xp .window {
-  border: 3px solid #003c74;
+  border: 3px solid rgba(0, 60, 116, 0.85);
   border-radius: 6px 6px 0 0;
-  box-shadow: 2px 2px 6px rgba(0,0,0,0.5), inset 0 0 0 1px #a6caf0;
+  box-shadow: 2px 4px 12px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(166, 202, 240, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 body.theme-xp .titlebar {
@@ -34,13 +36,17 @@ body.theme-xp .titlebar {
 }
 
 body.theme-xp nav {
-  background: linear-gradient(180deg, #2a6ec8 0%, #1a56b0 100%);
-  border-bottom: 3px solid #003c74;
+  background: linear-gradient(180deg, rgba(42, 110, 200, 0.9) 0%, rgba(26, 86, 176, 0.9) 100%);
+  border-bottom: 3px solid rgba(0, 60, 116, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 body.theme-xp .statusbar {
-  background: linear-gradient(180deg, #ece9d8 0%, #d8d4c0 100%);
-  border-top: 2px solid #7a96b8;
+  background: linear-gradient(180deg, rgba(236, 233, 216, 0.9) 0%, rgba(216, 212, 192, 0.9) 100%);
+  border-top: 2px solid rgba(122, 150, 184, 0.8);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ════════════════════════════════════════════════
@@ -48,9 +54,9 @@ body.theme-xp .statusbar {
    ════════════════════════════════════════════════ */
 body.theme-terminal {
   --bg: #0d0d0d;
-  --panel: #111111;
-  --titlebar: #0d0d0d;
-  --titlebar2: #0d0d0d;
+  --panel: rgba(17, 17, 17, 0.85);
+  --titlebar: rgba(13, 13, 13, 0.9);
+  --titlebar2: rgba(13, 13, 13, 0.9);
   --text: #00ff41;
   --border-light: #1a3a1a;
   --border-dark: #001a00;
@@ -65,9 +71,11 @@ body.theme-terminal {
 }
 
 body.theme-terminal .window {
-  border: 1px solid #005500;
+  border: 1px solid rgba(0, 85, 0, 0.8);
   border-radius: 0;
-  box-shadow: 0 0 8px rgba(0,255,65,0.15);
+  box-shadow: 0 0 12px rgba(0,255,65,0.2);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 body.theme-terminal .titlebar {
