@@ -23,7 +23,7 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
-import { fetchBlobsFromIndexer } from './utils/indexer'
+import { createShelbyIndexerClient } from '@shelby-protocol/sdk/browser'
 
 const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 if (!API_KEY) {
@@ -96,7 +96,7 @@ function App() {
   // Data State - Fixed: Initialized as empty, removed dummy data
   const [files, setFiles] = useState<StoredFile[]>([])
 
-  // Helper: Fetch history from Shelby storage API
+  // Helper: Fetch history from Shelby Blob Indexer (official SDK)
   const fetchVaultHistory = useCallback(async () => {
     if (!walletAddress || !ACTIVE_NET) {
       setFiles([]);
@@ -106,8 +106,65 @@ function App() {
     setIsHistoryLoading(true);
     setHistoryError(null);
 
-    const tryBlockchainFallback = async (addr: string) => {
-      console.log("[Vault] Attempting blockchain fallback (Transaction Scan)...");
+    try {
+      // Normalize wallet address to 64-char padded hex
+      let addr = walletAddress.toLowerCase();
+      const hex = addr.startsWith('0x') ? addr.slice(2) : addr;
+      addr = '0x' + hex.padStart(64, '0');
+
+      // ────────────────────────────────────────────────
+      // SOURCE A: Shelby Blob Indexer (official SDK client)
+      // Uses the Hasura GraphQL indexer that powers explorer.shelby.xyz
+      // ────────────────────────────────────────────────
+      try {
+        console.log('[Vault] Querying Shelby Blob Indexer for address:', addr);
+        const shelbyIdx = createShelbyIndexerClient(ACTIVE_NET.shelbyIndexer);
+        const result = await shelbyIdx.getBlobs({
+          where: { owner: { _eq: addr } },
+          orderBy: [{ updated_at: 'desc' as any }], // camelCase as per SDK interface
+          limit: 100,
+        });
+
+        const blobs: any[] = result?.blobs ?? [];
+        console.log(`[Vault] Shelby Indexer returned ${blobs.length} blobs`);
+
+        if (blobs.length > 0) {
+          const history: StoredFile[] = blobs.map((blob: any) => {
+            const name = blob.blob_name || 'Vault Asset'; // correct field: 'blob_name'
+            const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+            // created_at is a numeric unix timestamp (seconds or microseconds)
+            const rawTs = blob.created_at;
+            const tsMs = rawTs > 1e12 ? rawTs / 1000 : rawTs * 1000; // handle micro vs millis
+            const d = rawTs ? new Date(tsMs) : new Date();
+            const permConfig: PermissionConfig = { type: 'public', allowlist: [], timelock: '', price: '' };
+
+            return {
+              id: blob.blob_name || Date.now() + Math.random(),
+              name,
+              ext,
+              size: Number(blob.size) || 0,
+              date: d.toISOString().split('T')[0],
+              time: d.toTimeString().slice(0, 5),
+              uploader: blob.owner || addr,
+              status: 'stored' as const,
+              vis: 'public' as any,
+              permConfig,
+              network: ACTIVE_NET.label,
+              cid: blob.blob_name || '',
+              txHash: blob.blob_commitment || '',
+            };
+          });
+          setFiles(history);
+          return;
+        }
+      } catch (shelbyErr: any) {
+        console.warn('[Vault] Shelby Indexer failed:', shelbyErr?.message || shelbyErr);
+      }
+
+      // ────────────────────────────────────────────────
+      // SOURCE B: Aptos SDK Transaction Scan (fallback)
+      // ────────────────────────────────────────────────
+      console.log('[Vault] Falling back to Aptos SDK transaction scan...');
       try {
         const transactions = await aptos.getAccountTransactions({
           accountAddress: addr,
@@ -116,157 +173,58 @@ function App() {
 
         const contractAddress = ACTIVE_NET.contract;
         const blobTxs = transactions.filter((tx: any) => {
-          if (tx.type !== "user_transaction") return false;
-          const payload = tx.payload;
-          return (
-            payload?.function?.startsWith(`${contractAddress}::storage::register_blob`)
-          );
+          if (tx.type !== 'user_transaction') return false;
+          return tx.payload?.function?.startsWith(`${contractAddress}::storage::register_blob`);
         });
 
-        console.log(`[Vault] Found ${blobTxs.length} registration transactions on-chain`);
+        console.log(`[Vault] Found ${blobTxs.length} blob transactions on-chain`);
 
-        const fallbackHistory: StoredFile[] = blobTxs.map((tx: any) => {
-          const payload = tx.payload;
-          const args = payload.arguments || [];
-          
-          // Try to extract name from arguments if register_blob_v2
-          // register_blob_v2(name, expiry, commitment, size)
-          let name = "Vault Asset";
-          let size = 0;
-          
-          if (args.length >= 1 && typeof args[0] === 'string') {
-            // Hex string to ASCII if possible
-            try {
-              const hex = args[0].startsWith('0x') ? args[0].slice(2) : args[0];
-              name = new TextDecoder().decode(new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))));
-            } catch {
-              name = "Vault Asset";
+        if (blobTxs.length > 0) {
+          const fallbackHistory: StoredFile[] = blobTxs.map((tx: any) => {
+            const args = tx.payload?.arguments || [];
+            let name = 'Vault Asset';
+            let size = 0;
+
+            if (args.length >= 1 && typeof args[0] === 'string') {
+              try {
+                const h = args[0].startsWith('0x') ? args[0].slice(2) : args[0];
+                name = new TextDecoder().decode(new Uint8Array((h.match(/.{1,2}/g) ?? []).map((b: string) => parseInt(b, 16))));
+              } catch { name = 'Vault Asset'; }
             }
-          }
-          
-          if (args.length >= 4) {
-            size = parseInt(args[3]) || 0;
-          }
+            if (args.length >= 4) size = parseInt(args[3]) || 0;
 
-          const ext = name.split(".").pop()?.toUpperCase().slice(0, 4) || "BIN";
-          const dateStr = new Date(parseInt(tx.timestamp) / 1000).toISOString();
-
-          return {
-            id: tx.version,
-            name,
-            ext,
-            size,
-            date: dateStr.split("T")[0],
-            time: new Date(parseInt(tx.timestamp) / 1000).toTimeString().slice(0, 5),
-            uploader: addr,
-            status: "stored" as const,
-            vis: "public", // Default to public for on-chain detection unless we find metadata
-            network: ACTIVE_NET.label,
-            cid: name, // We use name as CID fallback
-            txHash: tx.hash
-          };
-        });
-
-        if (fallbackHistory.length > 0) {
-          setFiles(prev => {
-            // Merge: Keep local uploads, but add on-chain ones if missing
-            const existingHashes = new Set(prev.map(f => f.txHash));
-            const newOnes = fallbackHistory.filter(f => !existingHashes.has(f.txHash));
-            return [...prev, ...newOnes];
-          });
-        }
-      } catch (err: any) {
-        console.warn("[Vault] Blockchain fallback failed:", err.message);
-      }
-    };
-
-    try {
-      // Normalize address
-      let addr = walletAddress.toLowerCase();
-      if (addr.startsWith("0x")) {
-        const hex = addr.slice(2).padStart(64, '0');
-        addr = "0x" + hex;
-      } else {
-        addr = "0x" + addr.padStart(64, '0');
-      }
-
-      // Try REST API first (Source A)
-      const storageBase = ACTIVE_NET.shelbyRpc;
-      // Following Soobin logic: try with/without /shelby base
-      const historyUrl = `${storageBase}/shelby/v1/blobs/${addr}`;
-      
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      // Use the Soobin API key if we have it or the one from env
-      const useKey = API_KEY || "aptoslabs_8TvZJ1y8YXj_QKYMB9C3GLUmcEMbvtXVscowf3xfwjTTW";
-      if (useKey) {
-        headers["Authorization"] = `Bearer ${useKey}`;
-      }
-      
-      const res = await fetch(historyUrl, { headers }).catch(() => null);
-
-      if (res && res.ok) {
-        const blobs = await res.json().catch(() => []);
-        if (Array.isArray(blobs) && blobs.length > 0) {
-          console.log(`[Vault] Received ${blobs.length} blobs from REST RPC`);
-          const history = blobs.map((blob: any) => {
-            const name = blob.blobName || blob.name || "unknown";
-            const ext = name.split(".").pop()?.toUpperCase().slice(0, 4) || "BIN";
-            const permConfig: PermissionConfig = blob.metadata?.permConfig || { type: 'public', allowlist: [], timelock: '', price: '' };
-
+            const d = new Date(parseInt(tx.timestamp) / 1000);
+            const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
             return {
-              id: blob.id || Date.now() + Math.random(),
-              name,
-              ext,
-              size: blob.size || 0,
-              date: blob.createdAt ? new Date(blob.createdAt).toISOString().split("T")[0] : "-",
-              time: blob.createdAt ? new Date(blob.createdAt).toTimeString().slice(0, 5) : "-",
-              uploader: walletAddress,
-              status: "stored" as const,
-              vis: (permConfig.type === 'public' ? 'public' : permConfig.type === 'allowlist' ? 'private' : 'encrypted') as any,
-              permConfig,
+              id: tx.version,
+              name, ext, size,
+              date: d.toISOString().split('T')[0],
+              time: d.toTimeString().slice(0, 5),
+              uploader: addr,
+              status: 'stored' as const,
+              vis: 'public' as any,
               network: ACTIVE_NET.label,
-              cid: blob.blobId || blob.id || "",
-              txHash: blob.txHash || ""
+              cid: name,
+              txHash: tx.hash,
             };
           });
-          setFiles(history);
-          return; // Only early-exit when we actually have data
-        } else {
-          console.log('[Vault] REST API returned empty list, trying on-chain fallbacks...');
-        }
-      }
-
-      // Source B: Blockchain SDK (Transaction Scan)
-      await tryBlockchainFallback(addr);
-
-      // Source C: GraphQL Indexer (most reliable on-chain source)
-      console.log('[Vault] Attempting GraphQL Indexer fallback...');
-      try {
-        const indexerBlobs = await fetchBlobsFromIndexer(
-          ACTIVE_NET.indexer,
-          addr,
-          ACTIVE_NET.contract,
-          ACTIVE_NET.label
-        );
-        if (indexerBlobs.length > 0) {
-          console.log(`[Vault] GraphQL Indexer returned ${indexerBlobs.length} blobs`);
           setFiles(prev => {
             const existingHashes = new Set(prev.map(f => f.txHash));
-            const newOnes = indexerBlobs.filter(f => !existingHashes.has(f.txHash));
+            const newOnes = fallbackHistory.filter(f => !existingHashes.has(f.txHash));
             return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
           });
           return;
         }
-      } catch (idxErr: any) {
-        console.warn('[Vault] GraphQL Indexer failed:', idxErr.message);
+      } catch (sdkErr: any) {
+        console.warn('[Vault] Aptos SDK fallback failed:', sdkErr?.message || sdkErr);
       }
 
-      // All sources failed — gracefully fall through without clearing existing local data
-      console.warn('[Vault] All data sources exhausted. Displaying local-only cache.');
+      // All sources exhausted — keep any existing local data
+      console.warn('[Vault] All data sources returned empty. Displaying local-only cache.');
 
     } catch (err: any) {
-      console.warn("[Vault] Error in history sync:", err?.message);
-      setHistoryError(err?.message || "Failed to sync history");
+      console.warn('[Vault] Unexpected error in history sync:', err?.message);
+      setHistoryError(err?.message || 'Failed to sync history');
     } finally {
       setIsHistoryLoading(false);
     }
