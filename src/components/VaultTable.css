@@ -254,3 +254,68 @@ tbody tr.selected td {
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { min-width: 480px; }
 }
+
+/* ── Pagination Bar ─────────────────────────────── */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 4px 4px 2px;
+  border-top: 2px solid var(--border-dark);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+
+.page-btn95 {
+  min-width: 26px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  background: var(--panel);
+  border-top: 2px solid var(--border-light);
+  border-left: 2px solid var(--border-light);
+  border-right: 2px solid var(--border-dark);
+  border-bottom: 2px solid var(--border-dark);
+  cursor: pointer;
+  color: var(--text);
+  transition: none;
+  user-select: none;
+}
+
+.page-btn95:hover:not(:disabled) {
+  background: #d4d0c8;
+}
+
+.page-btn95:active:not(:disabled) {
+  border-top: 2px solid var(--border-dark);
+  border-left: 2px solid var(--border-dark);
+  border-right: 2px solid var(--border-light);
+  border-bottom: 2px solid var(--border-light);
+  padding-top: 2px;
+  padding-left: 7px;
+}
+
+.page-btn95:disabled {
+  color: var(--border-mid);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.page-btn95.page-active {
+  background: var(--accent);
+  color: #fff;
+  border-top: 2px solid #1a38a0;
+  border-left: 2px solid #1a38a0;
+  border-right: 2px solid #6fa8ef;
+  border-bottom: 2px solid #6fa8ef;
+  font-weight: 700;
+  cursor: default;
+}
+
+.page-info {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--border-mid);
+  white-space: nowrap;
+}
