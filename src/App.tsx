@@ -185,7 +185,7 @@ function App() {
       const pageSize = 100;
       let start: number | undefined = undefined;
 
-      for (let page = 0; page < 2; page++) {
+      for (let page = 0; page < 10; page++) {
         const url = start !== undefined
           ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
           : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
