@@ -34,11 +34,11 @@ export async function fetchBlobsFromIndexer(
 ): Promise<IndexerBlob[]> {
   // Correct Aptos Indexer GraphQL schema — use user_transactions root field
   const query = `
-    query ShelbyBlobHistory($addr: String!, $func: String!, $limit: Int!) {
+    query ShelbyBlobHistory($addr: String!, $contract: String!, $limit: Int!) {
       user_transactions(
         where: {
           sender: { _eq: $addr }
-          entry_function_id_str: { _ilike: $func }
+          entry_function_id_str: { _like: $contract }
         }
         order_by: { timestamp: desc }
         limit: $limit
@@ -48,15 +48,13 @@ export async function fetchBlobsFromIndexer(
         timestamp
         entry_function_id_str
         sender
-        arguments
+        payload
       }
     }
   `;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
-
-  const funcPattern = `%${contract}%register_blob%`;
 
   try {
     const res = await fetch(indexerUrl, {
@@ -66,7 +64,7 @@ export async function fetchBlobsFromIndexer(
         query,
         variables: {
           addr: walletAddress.toLowerCase(),
-          func: funcPattern,
+          contract: `${contract}::%`, // Match any function in the contract module
           limit,
         },
       }),
@@ -87,60 +85,85 @@ export async function fetchBlobsFromIndexer(
       throw new Error(json.errors[0]?.message || 'GraphQL error');
     }
 
-    const txns: any[] = json?.data?.user_transactions ?? [];
-    console.log(`[Indexer] GraphQL returned ${txns.length} user_transactions`);
+    const allRows: any[] = json?.data?.user_transactions ?? [];
+    
+    // 1. Identify all deletions first to filter later
+    const deletedBlobNames = new Set<string>();
+    for (const tx of allRows) {
+      const fn = tx.entry_function_id_str || '';
+      const payload = tx.payload || {};
+      const args = payload.function?.arguments || payload.arguments || [];
 
-    return txns
-      .map((tx: any): IndexerBlob | null => {
-        const args: string[] = tx.arguments ?? [];
-        let name = 'Vault Asset';
-        let size = 0;
-
-        // Argument 0 is the blob name (hex-encoded or plain)
-        if (args.length > 0) {
-          const rawName = args[0];
-          if (typeof rawName === 'string' && rawName.startsWith('0x')) {
-            try {
-              const hex = rawName.slice(2);
-              const decoded = new TextDecoder().decode(
-                new Uint8Array((hex.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)))
-              );
-              if (decoded && decoded.trim().length > 0) name = decoded.trim();
-            } catch {
-              name = rawName;
-            }
-          } else if (typeof rawName === 'string' && rawName.length > 0) {
-            name = rawName;
-          }
+      if (fn.includes('delete_blob')) {
+        if (args[0]) deletedBlobNames.add(String(args[0]));
+      } else if (fn.includes('delete_multiple_blobs')) {
+        if (Array.isArray(args[0])) {
+          args[0].forEach((name: string) => deletedBlobNames.add(name));
         }
+      }
+    }
 
-        // Argument 3 is usually size in bytes
-        if (args.length >= 4) {
-          size = parseInt(args[3]) || 0;
-        }
+    // 2. Process registrations
+    const history: IndexerBlob[] = [];
+    for (const tx of allRows) {
+      const fn = tx.entry_function_id_str || '';
+      if (!fn.includes('register_')) continue;
 
-        // Timestamp from indexer is in microseconds
-        const tsMicro = parseInt(tx.timestamp);
-        const tsMs = isNaN(tsMicro) ? Date.now() : tsMicro / 1000;
-        const d = new Date(tsMs);
+      const payload = tx.payload || {};
+      const args = payload.function?.arguments || payload.arguments || [];
+      const tsMicro = parseInt(tx.timestamp);
+      const d = new Date(isNaN(tsMicro) ? Date.now() : tsMicro / 1000);
+      const dateStr = d.toISOString().split('T')[0];
+      const timeStr = d.toTimeString().slice(0, 5);
+
+      if (fn.includes('register_multiple_blobs')) {
+        const names: string[] = args[0] || [];
+        const sizes: any[] = args[4] || args[3] || []; // different versions of the contract might have different indices
+        
+        names.forEach((name, i) => {
+          if (deletedBlobNames.has(name)) return;
+          const size = parseInt(sizes[i]) || 0;
+          const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+          history.push({
+            id: Number(tx.version) + (i * 0.001),
+            name,
+            ext,
+            size,
+            date: dateStr,
+            time: timeStr,
+            uploader: tx.sender || walletAddress,
+            status: 'stored',
+            vis: 'public',
+            network: networkLabel,
+            cid: name,
+            txHash: tx.hash || '',
+          });
+        });
+      } else if (fn.includes('register_blob')) {
+        const name = args[0] || 'Vault Asset';
+        if (deletedBlobNames.has(name)) continue;
+
+        const size = parseInt(args[4] || args[3]) || 0;
         const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-
-        return {
+        history.push({
           id: parseInt(tx.version) || Date.now(),
           name,
           ext,
           size,
-          date: d.toISOString().split('T')[0],
-          time: d.toTimeString().slice(0, 5),
+          date: dateStr,
+          time: timeStr,
           uploader: tx.sender || walletAddress,
           status: 'stored',
           vis: 'public',
           network: networkLabel,
           cid: name,
           txHash: tx.hash || '',
-        };
-      })
-      .filter((b): b is IndexerBlob => b !== null);
+        });
+      }
+    }
+
+    console.log(`[Indexer] Processed ${history.length} active blobs after filtering deletions.`);
+    return history;
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {

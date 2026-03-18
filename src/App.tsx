@@ -23,6 +23,7 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
+import { fetchBlobsFromIndexer } from './utils/indexer'
 
 const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 if (!API_KEY) {
@@ -100,175 +101,50 @@ function App() {
 
   // Helper: Fetch vault history from Aptos REST API (no auth needed, pagination supported)
   const fetchVaultHistory = useCallback(async () => {
-    if (!walletAddress || !ACTIVE_NET) {
-      return;
-    }
+    if (!walletAddress || !ACTIVE_NET) return;
 
     setIsHistoryLoading(true);
     setHistoryError(null);
 
     try {
+      console.log(`[Vault] Syncing history via GraphQL Indexer: ${ACTIVE_NET.indexer}`);
+      const history = await fetchBlobsFromIndexer(
+        ACTIVE_NET.indexer,
+        walletAddress,
+        ACTIVE_NET.contract,
+        ACTIVE_NET.label,
+        200 // Load last 200 blobs
+      );
+
+      // Restore saved permission labels from localStorage
       const addr = walletAddress.toLowerCase();
-      const aptosRpc = ACTIVE_NET.aptosRpc;
-
-      // Fetch transactions with pagination (up to 200)
-      const allBlobTxs: any[] = [];
-      const pageSize = 100;
-      let start: number | undefined = undefined;
-
-      for (let page = 0; page < 2; page++) {
-        const url = start !== undefined
-          ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
-          : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
-
-        const res = await fetch(url).catch(() => null);
-        if (!res || !res.ok) break;
-
-        const txns: any[] = await res.json().catch(() => []);
-        if (!Array.isArray(txns) || txns.length === 0) break;
-
-        // Filter for blob registrations and deletions
-        const relevantTxs = txns.filter((tx: any) => {
-          if (tx.type !== 'user_transaction') return false;
-          const fn: string = tx.payload?.function ?? '';
-          return fn.includes('register_blob') || 
-                 fn.includes('register_multiple_blobs') || 
-                 fn.includes('::storage::') || 
-                 fn.includes('delete_blob') || 
-                 fn.includes('delete_multiple_blobs');
-        });
-        allBlobTxs.push(...relevantTxs);
-
-        // Get lowest version for next page
-        const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-        if (versions.length > 0) {
-          start = Math.min(...versions) - 1;
-        } else {
-          break;
+      const historyWithPerms = history.map(f => {
+        const storageKey = `shelbyos_perm_${addr}/${f.name}`;
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const savedConfig = JSON.parse(saved);
+            return {
+              ...f,
+              permConfig: savedConfig,
+              vis: (savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted') as any
+            };
+          } catch { return f; }
         }
-        if (start < 0) break;
-        if (txns.length < pageSize) break; // Reached the end
-      }
-      
-      console.log(`[Vault] Found ${allBlobTxs.length} blob-related transactions via Aptos REST API`);
+        return f;
+      });
 
-      if (allBlobTxs.length > 0) {
-        // Sort newest first
-        allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
-
-        // Identify deleted blobs
-        const deletedBlobNames = new Set<string>();
-        for (const tx of allBlobTxs) {
-          const fn: string = tx.payload?.function ?? '';
-          const args: any[] = tx.payload?.arguments ?? [];
-          if (fn.includes('delete_blob') && args.length >= 1 && typeof args[0] === 'string') {
-            deletedBlobNames.add(args[0]);
-          } else if (fn.includes('delete_multiple_blobs') && args.length >= 1 && Array.isArray(args[0])) {
-            args[0].forEach((name: string) => deletedBlobNames.add(name));
-          }
-        }
-
-        // Filter out deletions to only keep register blobs
-        const registerTxs = allBlobTxs.filter((tx: any) => {
-          const fn: string = tx.payload?.function ?? '';
-          return !fn.includes('delete_blob') && !fn.includes('delete_multiple_blobs');
-        });
-
-        const history: StoredFile[] = registerTxs.flatMap((tx: any) => {
-          const args: any[] = tx.payload?.arguments ?? [];
-          const fn: string = tx.payload?.function ?? '';
-
-          // Timestamp from Aptos is in microseconds
-          const tsMicro = parseInt(tx.timestamp) || 0;
-          const d = new Date(tsMicro / 1000);
-
-          if (fn.includes('register_multiple_blobs') && Array.isArray(args[0])) {
-            const names: string[] = args[0];
-            const sizes: any[] = args.length >= 5 && Array.isArray(args[4]) ? args[4]
-                                : args.length >= 4 && Array.isArray(args[3]) ? args[3] : [];
-            
-            return names.map((name, i) => {
-              const size = parseInt(sizes[i]) || 0;
-              const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-              return {
-                id: Number(tx.version) + (i * 0.001), // ensure unique ID per file within tx
-                name,
-                ext,
-                size,
-                date: d.toISOString().split('T')[0],
-                time: d.toTimeString().slice(0, 5),
-                uploader: addr,
-                status: 'stored' as const,
-                vis: 'public' as any,
-                permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-                network: ACTIVE_NET.label,
-                cid: name,
-                txHash: tx.hash || '',
-              };
-            });
-          } else {
-            let name = 'Vault Asset';
-            if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
-              name = args[0];
-            }
-
-            let size = 0;
-            if (args.length >= 5 && args[4] !== undefined) {
-              size = parseInt(args[4]) || 0;
-            } else if (args.length >= 4) {
-              size = parseInt(args[3]) || 0;
-            }
-            const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-
-            return [{
-              id: tx.version,
-              name,
-              ext,
-              size,
-              date: d.toISOString().split('T')[0],
-              time: d.toTimeString().slice(0, 5),
-              uploader: addr,
-              status: 'stored' as const,
-              vis: 'public' as any,
-              permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-              network: ACTIVE_NET.label,
-              cid: name,
-              txHash: tx.hash || '',
-            }];
-          }
-        }).filter(file => !deletedBlobNames.has(file.name));
-
-// Restore saved permission labels from localStorage
-        const historyWithPerms = history.map(f => {
-          const storageKey = `shelbyos_perm_${addr}/${f.name}`;
-          const saved = localStorage.getItem(storageKey);
-          if (saved) {
-            try {
-              const savedConfig = JSON.parse(saved);
-              return {
-                ...f,
-                permConfig: savedConfig,
-                vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any,
-              };
-            } catch { /* ignore parse errors */ }
-          }
-          return f;
-        });
-
-        setFiles(historyWithPerms);
-        return;
-      }
-
-      // Nothing found — keep any locally-added files
-      console.warn('[Vault] No blob transactions found for this address on current network.');
-
+      setFiles(historyWithPerms as any);
+      console.log(`[Vault] GraphQL Sync Complete: ${historyWithPerms.length} files.`);
     } catch (err: any) {
-      console.warn('[Vault] Error fetching vault history:', err?.message);
-      setHistoryError(err?.message || 'Failed to sync history');
+      console.error("[Vault] History Sync Failed (GraphQL):", err);
+      if (!err?.message?.includes('Abort')) {
+        setHistoryError("Indexer Sync Offline");
+      }
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [walletAddress, ACTIVE_NET, activeNetKey]);
+  }, [walletAddress, ACTIVE_NET]);
 
   // Fetch history when wallet connects
   useEffect(() => {
