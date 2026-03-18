@@ -40,8 +40,10 @@ function App() {
   
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
+  const [martianAddress, setMartianAddress] = useState<string>('');
   const walletConnected = connected || manualWalletId !== null;
-  const rawAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
+  const rawAddress = account?.address?.toString()
+    || (manualWalletId === 'Martian' ? martianAddress || (window as any).martian?.selectedAccount?.address || '' : '');
   // Pad the address to 64 characters to support Google Keyless accounts without leading zeros
   const walletAddress = rawAddress ? '0x' + (rawAddress.startsWith('0x') ? rawAddress.slice(2) : rawAddress).padStart(64, '0').toLowerCase() : '';
   
@@ -413,10 +415,13 @@ function App() {
         if ((window as any).martian) {
           clearInterval(interval);
           try {
-            const response = await (window as any).martian.connect();
-            if (response?.address || response?.account?.address) {
-              setManualWalletId('Martian');
-            }
+          const response = await (window as any).martian.connect();
+          const addr: string = response?.address || response?.account?.address
+            || localStorage.getItem('shelbyos_martian_address') || '';
+          if (addr) {
+            setManualWalletId('Martian');
+            setMartianAddress(addr);
+          }
           } catch (err) {
             localStorage.removeItem('shelbyos_martian_connected');
           }
@@ -459,9 +464,12 @@ function App() {
           return;
         }
         const response = await (window as any).martian.connect();
-        if (response?.address || response?.account?.address) {
+        const addr: string = response?.address || response?.account?.address || '';
+        if (addr) {
           setManualWalletId('Martian');
+          setMartianAddress(addr);
           localStorage.setItem('shelbyos_martian_connected', 'true');
+          localStorage.setItem('shelbyos_martian_address', addr);
           showToast('Martian connected ✓', 'success');
         } else {
           showToast('Martian: no address returned', 'error');
@@ -501,7 +509,9 @@ function App() {
       if (manualWalletId === 'Martian') {
         await (window as any).martian?.disconnect();
         setManualWalletId(null);
+        setMartianAddress('');
         localStorage.removeItem('shelbyos_martian_connected');
+        localStorage.removeItem('shelbyos_martian_address');
       } else {
         await disconnect();
       }
