@@ -126,11 +126,11 @@ function App() {
           query getBlobs($where: blobs_bool_exp) {
             blobs(where: $where) {
               blob_name
-              file_size
+              size
+              created_at
               expires_at
               is_deleted
               is_written
-              tx_version
             }
           }
         `;
@@ -171,15 +171,16 @@ function App() {
 
           const history: StoredFile[] = accountBlobs.map((blob: any) => {
             const blobName: string = blob.blob_name || 'Unknown';
-            const txVersion = parseInt(blob.tx_version) || 0;
+            const tsMicro = parseInt(blob.created_at) || 0;
+            const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
             const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
             return {
-              id: txVersion,
+              id: tsMicro || Math.random(),
               name: blobName,
               ext,
-              size: parseInt(blob.file_size) || 0,
-              date: new Date().toISOString().split('T')[0],
-              time: '',
+              size: parseInt(blob.size) || 0,
+              date: d.toISOString().split('T')[0],
+              time: d.toTimeString().slice(0, 5),
               uploader: addr,
               status: 'stored' as const,
               vis: 'public' as any,
