@@ -702,6 +702,9 @@ function App() {
 
       let done = 0;
       for (const { item, data } of fileCommitments) {
+        // Mandatory pause before each file to let RPC breathe
+        if (done > 0) await new Promise(r => setTimeout(r, 1000));
+
         setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
         addLog('SYNC', `Streaming ${item.file.name} to Decentralized Vault Nodes...`);
         
@@ -709,7 +712,8 @@ function App() {
         let attempts = 0;
         let lastErr: any = null;
 
-        while (attempts < 3 && !success) {
+        const MAX_ATTEMPTS = 5;
+        while (attempts < MAX_ATTEMPTS && !success) {
           try {
             await shelbyClient.rpc.putBlob({
               account: walletAddress,
@@ -720,11 +724,14 @@ function App() {
           } catch (rpcErr: any) {
             attempts++;
             lastErr = rpcErr;
-            if (attempts < 3) {
-              addLog('WARN', `RPC stream failed for ${item.file.name}. Retrying (${attempts}/3).`);
+            const status = rpcErr?.status || 0;
+            const isRateLimit = status === 429;
+            
+            if (attempts < MAX_ATTEMPTS) {
+              const backoff = isRateLimit ? (attempts * 4000) : (attempts * 2000);
+              addLog('WARN', `${item.file.name} failed (HTTP ${status}). Retrying in ${backoff/1000}s... (${attempts}/${MAX_ATTEMPTS})`);
               setStatusLine(`Retrying ${item.file.name}...`);
-              // Delay before retry (1.5s then 3s)
-              await new Promise(r => setTimeout(r, attempts * 1500));
+              await new Promise(r => setTimeout(r, backoff));
             }
           }
         }
