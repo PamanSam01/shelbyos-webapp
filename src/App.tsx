@@ -23,6 +23,7 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
+import { fetchBlobsFromIndexer } from './utils/indexer'
 
 const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 if (!API_KEY) {
@@ -233,8 +234,33 @@ function App() {
         }
       }
 
-      // If REST fails or is empty, try Blockchain Fallback (Source B)
+      // Source B: Blockchain SDK (Transaction Scan)
       await tryBlockchainFallback(addr);
+
+      // Source C: GraphQL Indexer (most reliable on-chain source)
+      console.log('[Vault] Attempting GraphQL Indexer fallback...');
+      try {
+        const indexerBlobs = await fetchBlobsFromIndexer(
+          ACTIVE_NET.indexer,
+          addr,
+          ACTIVE_NET.contract,
+          ACTIVE_NET.label
+        );
+        if (indexerBlobs.length > 0) {
+          console.log(`[Vault] GraphQL Indexer returned ${indexerBlobs.length} blobs`);
+          setFiles(prev => {
+            const existingHashes = new Set(prev.map(f => f.txHash));
+            const newOnes = indexerBlobs.filter(f => !existingHashes.has(f.txHash));
+            return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+          });
+          return;
+        }
+      } catch (idxErr: any) {
+        console.warn('[Vault] GraphQL Indexer failed:', idxErr.message);
+      }
+
+      // All sources failed — gracefully fall through without clearing existing local data
+      console.warn('[Vault] All data sources exhausted. Displaying local-only cache.');
 
     } catch (err: any) {
       console.warn("[Vault] Error in history sync:", err?.message);
@@ -249,6 +275,15 @@ function App() {
     if (walletConnected && walletAddress) {
       fetchVaultHistory();
     }
+  }, [walletConnected, walletAddress, fetchVaultHistory]);
+
+  // Real-time polling: re-fetch vault every 30 seconds while wallet is connected
+  useEffect(() => {
+    if (!walletConnected || !walletAddress) return;
+    const pollInterval = setInterval(() => {
+      fetchVaultHistory();
+    }, 30_000);
+    return () => clearInterval(pollInterval);
   }, [walletConnected, walletAddress, fetchVaultHistory]);
 
   // Initialize Aptos SDK client

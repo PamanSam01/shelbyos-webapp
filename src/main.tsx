@@ -11,16 +11,18 @@ import { Network } from "@aptos-labs/ts-sdk";
 
 import "./index.css";
 import App from "./App";
-
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 createRoot(document.getElementById("root")!).render(
-  <AptosWalletAdapterProvider
-    autoConnect={true}
-    dappConfig={{
-      network: Network.TESTNET,
-      aptosConnectDappId: "shelbyos-test"
-    }}
-  >
-    <App />
-  </AptosWalletAdapterProvider>
+  <ErrorBoundary>
+    <AptosWalletAdapterProvider
+      autoConnect={true}
+      dappConfig={{
+        network: Network.TESTNET,
+        aptosConnectDappId: "shelbyos-test"
+      }}
+    >
+      <App />
+    </AptosWalletAdapterProvider>
+  </ErrorBoundary>
 );
