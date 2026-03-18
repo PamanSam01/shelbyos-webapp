@@ -555,102 +555,6 @@ function App() {
     }
   }
 
-  const uploadToShelby = async (file: File, account: string | any, provider: any) => {
-    // API key: ShelbyNet requires one, Testnet public endpoint does not
-    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-    const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET; // optional
-    const isOnShelbyNet = activeNetKey === "shelbynet";
-
-    // Only block upload on ShelbyNet if key is missing
-    if (isOnShelbyNet && !SHELBYNET_KEY) {
-      showToast("ShelbyNet API key not configured", "error");
-      return { success: false, error: "Missing ShelbyNet API key" };
-    }
-
-    if (!ACTIVE_NET?.contract) {
-      showToast("Storage contract configuration missing", "error");
-      return { success: false, error: "contract_missing" };
-    }
-
-    if (!walletConnected || !walletAddress || !ACTIVE_NET) {
-      return { success: false, error: "wallet_not_initialized" };
-    }
-
-    try {
-      showToast(`Encoding ${file.name}...`, "info");
-      addLog('PROC', `Generating erasure coding for ${file.name}...`);
-      const {
-        generateCommitments,
-        ShelbyBlobClient,
-        ShelbyClient,
-        expectedTotalChunksets,
-      } = await import("@shelby-protocol/sdk/browser");
-
-      const data = new Uint8Array(await file.arrayBuffer());
-      const commitments = await generateCommitments(provider, data);
-
-      showToast("Waiting for wallet approval...", "info");
-      addLog('AUTH', 'Awaiting wallet signature for contract transaction...');
-      const payload = ShelbyBlobClient.createRegisterBlobPayload({
-        account: account as any,
-        blobName: file.name,
-        blobMerkleRoot: commitments.blob_merkle_root,
-        numChunksets: expectedTotalChunksets(commitments.raw_data_size),
-        expirationMicros: (Date.now() + 1000 * 60 * 60 * 24 * 30) * 1000,
-        blobSize: commitments.raw_data_size,
-        encoding: 0,
-      });
-
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error("Transaction hash not found after submission");
-
-      showToast("Confirming on-chain registration...", "info");
-      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
-      await aptos.waitForTransaction({ transactionHash: txHash });
-      console.log("Blob registered on-chain:", txHash);
-
-      showToast("Uploading file to Shelby network...", "info");
-      addLog('SYNC', `Streaming raw data to Decentralized Vault Nodes...`);
-      const { Network } = await import("@aptos-labs/ts-sdk");
-
-      // Only pass apiKey for the network that requires auth
-      const shelbyClient = isOnShelbyNet
-        ? new ShelbyClient({
-            network: Network.SHELBYNET,
-            apiKey: SHELBYNET_KEY,
-            fullnode: ACTIVE_NET.aptosRpc,
-            shelbynode: ACTIVE_NET.shelbyRpc,
-          } as any)
-        : TESTNET_KEY
-        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
-
-      await shelbyClient.rpc.putBlob({
-        account: account as any,
-        blobName: file.name,
-        blobData: new Uint8Array(await file.arrayBuffer()),
-      });
-
-      console.log("Blob uploaded to Shelby RPC");
-      addLog('DONE', `${file.name} successfully encrypted and stored.`);
-      return { success: true, blobId: file.name, txHash };
-
-    } catch (err: any) {
-      console.error("Shelby upload pipeline error:", err);
-      const msg = err?.message || "upload_failed";
-      if (msg.includes("rejected") || msg.includes("cancel") || msg.includes("User denied")) {
-        showToast("Upload cancelled by user", "info");
-        addLog('ERR ', `Upload cancelled by user.`);
-      } else {
-        showToast(`Upload failed: ${msg.slice(0, 80)}`, "error");
-        addLog('ERR ', `Exception: ${msg.slice(0, 50)}`);
-      }
-      return { success: false, error: msg };
-    }
-  }
-
-
   const handleUploadAll = async () => {
     // Prevent concurrent calls
     if (isUploading) return;
@@ -672,66 +576,158 @@ function App() {
     setUploadLogs([]);
     addLog('INIT', `Initiating batch upload sequence for ${readyItems.length} file(s)...`);
     const total = readyItems.length;
-    let done = 0;
 
-    const { createDefaultErasureCodingProvider } = await import('@shelby-protocol/sdk/browser') as any;
-    const provider = await createDefaultErasureCodingProvider();
+    try {
+      const { 
+        createDefaultErasureCodingProvider, 
+        generateCommitments, 
+        ShelbyBlobClient, 
+        expectedTotalChunksets,
+        ShelbyClient
+      } = await import('@shelby-protocol/sdk/browser') as any;
+      const { Network } = await import('@aptos-labs/ts-sdk');
+      const provider = await createDefaultErasureCodingProvider();
 
-    for (const item of uploadQueue) {
-      if (item.status !== 'ready') continue;
-
-      item.status = 'uploading';
-      setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
-      setUploadQueue([...uploadQueue]);
-
-      const result = await uploadToShelby(item.file, walletAddress, provider);
-
-      if (result.success) {
-        const now = new Date();
-        const filePerm = item.permConfig || defaultPerm;
-
-        const newStoredFile: StoredFile = {
-          id: Date.now() + Math.random(),
-          name: item.file.name,
-          ext: (item.file.name.split('.').pop() || 'BIN').toUpperCase().slice(0,4),
-          size: item.file.size,
-          cid: result.blobId || item.file.name,
-          txHash: result.txHash || '',
-          status: 'stored',
-          vis: filePerm.type === 'public' ? 'public' : filePerm.type === 'allowlist' ? 'private' : 'encrypted',
-          permConfig: { ...filePerm },
-          previewUrl: URL.createObjectURL(item.file),
-          date: now.toISOString().split('T')[0],
-          time: now.toTimeString().slice(0,5),
-          uploader: walletAddress,
-          network: ACTIVE_NET?.label || 'Unknown',
-        };
-
-        setFiles(prev => [newStoredFile, ...prev]);
-        item.status = 'stored';
-        done++;
-        setOverallProgress(Math.round((done / total) * 100));
+      // Step 1: Generate commitments
+      showToast("Generating erasure coding for all files...", "info");
+      addLog('PROC', `Generating commitments for ${total} file(s)...`);
+      
+      const blobsPayloadInfo = [];
+      const fileCommitments = []; // To store for RPC
+      
+      for (const item of readyItems) {
+        item.status = 'uploading';
+        setStatusLine(`Preparing ${item.file.name}...`);
+        setUploadQueue([...uploadQueue]);
         
-        // Refresh full history from Shelby API after successful upload
-        // Added small timeout to allow RPC/Indexer to catch up
-        setTimeout(() => fetchVaultHistory(), 1000);
+        const data = new Uint8Array(await item.file.arrayBuffer());
+        const commitments = await generateCommitments(provider, data);
+        
+        blobsPayloadInfo.push({
+          blobName: item.file.name,
+          blobSize: commitments.raw_data_size,
+          blobMerkleRoot: commitments.blob_merkle_root,
+          numChunksets: expectedTotalChunksets(commitments.raw_data_size)
+        });
+        
+        fileCommitments.push({ item, data });
+      }
+
+      // Step 2: Batch register on-chain
+      showToast("Waiting for wallet approval...", "info");
+      addLog('AUTH', `Awaiting single wallet signature for ${total} file(s)...`);
+      
+      const payload = ShelbyBlobClient.createBatchRegisterBlobsPayload({
+        account: account as any,
+        expirationMicros: (Date.now() + 1000 * 60 * 60 * 24 * 30) * 1000,
+        blobs: blobsPayloadInfo,
+        encoding: 0
+      });
+
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error("Transaction hash not found after submission");
+
+      showToast("Confirming on-chain registration...", "info");
+      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
+      await aptos.waitForTransaction({ transactionHash: txHash });
+      console.log("Blobs registered on-chain:", txHash);
+      
+      // Step 3: Stream to RPC sequentially
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      const isOnShelbyNet = activeNetKey === "shelbynet";
+      
+      if (isOnShelbyNet && !SHELBYNET_KEY) throw new Error("Missing ShelbyNet API key");
+      
+      const shelbyClient = isOnShelbyNet
+        ? new ShelbyClient({
+            network: Network.SHELBYNET,
+            apiKey: SHELBYNET_KEY,
+            fullnode: ACTIVE_NET.aptosRpc,
+            shelbynode: ACTIVE_NET.shelbyRpc,
+          } as any)
+        : TESTNET_KEY
+        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
+        : new ShelbyClient({ network: Network.TESTNET } as any);
+
+      let done = 0;
+      for (const { item, data } of fileCommitments) {
+        setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
+        addLog('SYNC', `Streaming ${item.file.name} to Decentralized Vault Nodes...`);
+        
+        try {
+          await shelbyClient.rpc.putBlob({
+            account: account as any,
+            blobName: item.file.name,
+            blobData: data,
+          });
+          
+          addLog('DONE', `${item.file.name} successfully encrypted and stored.`);
+          
+          // Mark successful
+          item.status = 'stored';
+          done++;
+          setOverallProgress(Math.round((done / total) * 100));
+          
+          const now = new Date();
+          const filePerm = item.permConfig || defaultPerm;
+          const newStoredFile: StoredFile = {
+            id: Date.now() + Math.random(),
+            name: item.file.name,
+            ext: (item.file.name.split('.').pop() || 'BIN').toUpperCase().slice(0,4),
+            size: item.file.size,
+            cid: item.file.name,
+            txHash: txHash,
+            status: 'stored',
+            vis: filePerm.type === 'public' ? 'public' : filePerm.type === 'allowlist' ? 'private' : 'encrypted',
+            permConfig: { ...filePerm },
+            previewUrl: URL.createObjectURL(item.file),
+            date: now.toISOString().split('T')[0],
+            time: now.toTimeString().slice(0,5),
+            uploader: walletAddress,
+            network: ACTIVE_NET?.label || 'Unknown',
+          };
+          setFiles(prev => [newStoredFile, ...prev]);
+        } catch (rpcErr: any) {
+           item.status = 'error';
+           showToast(`Upload failed for ${item.file.name}`, 'error');
+           addLog('ERR ', `RPC Error for ${item.file.name}: ${rpcErr?.message?.slice(0,50)}`);
+        }
+        setUploadQueue([...uploadQueue]);
+      }
+      
+      // Refresh history
+      setTimeout(() => fetchVaultHistory(), 1000);
+      
+      addLog('DONE', `Batch sequence completed. ${done}/${total} successful.`);
+      setStatusLine(`✓ ${done} file${done !== 1 ? 's' : ''} uploaded to Shelby`);
+      if (done > 0) showToast(`${done} file${done !== 1 ? 's' : ''} uploaded successfully ✓`, 'success');
+
+    } catch (err: any) {
+      console.error("Batch upload pipeline error:", err);
+      const msg = err?.message || "upload_failed";
+      if (msg.includes("rejected") || msg.includes("cancel") || msg.includes("User denied")) {
+        showToast("Batch upload cancelled by user", "info");
+        addLog('ERR ', `Transaction cancelled by user.`);
       } else {
-        item.status = 'ready';
-        showToast(`Upload failed: ${item.file.name}`, 'error');
+        showToast(`Batch upload failed: ${msg.slice(0, 80)}`, "error");
+        addLog('ERR ', `Exception: ${msg.slice(0, 50)}`);
+      }
+      
+      // Mark remaining as ready
+      for (const item of readyItems) {
+        if (item.status === 'uploading') item.status = 'ready';
       }
       setUploadQueue([...uploadQueue]);
     }
-
-    setIsUploading(false);
-    addLog('DONE', `Batch sequence completed. ${done}/${total} successful.`);
-    setStatusLine(`✓ ${done} file${done !== 1 ? 's' : ''} uploaded to Shelby`);
-    if (done > 0) showToast(`${done} file${done !== 1 ? 's' : ''} uploaded successfully ✓`, 'success');
     
+    setIsUploading(false);
     setTimeout(() => {
       setUploadQueue([]);
       setIsUploadDetailModalOpen(false);
       setStatusLine('');
-    }, 1800);
+    }, 2500);
   }
 
   const handleClearVault = () => {
