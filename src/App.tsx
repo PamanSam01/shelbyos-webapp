@@ -110,7 +110,8 @@ function App() {
     setHistoryError(null);
 
     try {
-      const { ShelbyClient, Network } = await import('@shelby-protocol/sdk/browser') as any;
+      const { ShelbyClient } = await import('@shelby-protocol/sdk/browser') as any;
+      const { Network } = await import('@aptos-labs/ts-sdk');
       const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
       const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
       const isOnShelbyNet = activeNetKey === "shelbynet";
