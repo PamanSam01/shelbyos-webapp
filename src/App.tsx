@@ -874,8 +874,15 @@ function App() {
 
     showToast(`Waiting for wallet signature to delete "${f.name}"…`, 'info');
     try {
+      // Strip redundant owner address prefix if present in blob name (required for SDK delete)
+      let cleanName = f.name;
+      const ownerPrefix = `@${walletAddress}/`;
+      const ownerPrefixLower = `@${walletAddress.toLowerCase()}/`;
+      if (cleanName.startsWith(ownerPrefix)) cleanName = cleanName.slice(ownerPrefix.length);
+      else if (cleanName.startsWith(ownerPrefixLower)) cleanName = cleanName.slice(ownerPrefixLower.length);
+
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
-      const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: f.name });
+      const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: cleanName });
       const txResult = await signAndSubmitTransaction({ data: payload });
       const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
       if (!txHash) throw new Error('No tx hash returned after delete');
@@ -900,7 +907,10 @@ function App() {
   const handleOpenExplorer = (id: number) => {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) return;
-    const explorerBase = 'https://explorer.shelby.xyz/testnet/account';
+    const isShelbyNet = activeNetKey === "shelbynet";
+    const explorerBase = isShelbyNet 
+      ? 'https://explorer.shelby.xyz/shelbynet/account' 
+      : 'https://explorer.shelby.xyz/testnet/account';
     const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
     window.open(url, '_blank', 'noopener');
   };
@@ -909,7 +919,10 @@ function App() {
   const handleCopyLink = (id: number) => {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) return;
-    const explorerBase = 'https://explorer.shelby.xyz/testnet/account';
+    const isShelbyNet = activeNetKey === "shelbynet";
+    const explorerBase = isShelbyNet 
+      ? 'https://explorer.shelby.xyz/shelbynet/account' 
+      : 'https://explorer.shelby.xyz/testnet/account';
     const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
     navigator.clipboard.writeText(url).then(() => showToast('Explorer link copied ✓', 'success'));
   };
@@ -999,8 +1012,19 @@ function App() {
             onManagePermission={(id) => {
               const file = files.find(f => f.id === id);
               if (file) {
-                setEditingFileId(id);
+                setSelectedFile(file);
                 setIsPermModalOpen(true);
+              }
+            }}
+            onPermissionChange={(id, newConfig) => {
+              // Update local state so UI reflects change immediately
+              setFiles(prev => prev.map(f => f.id === id ? { ...f, permConfig: newConfig, vis: newConfig.type } : f));
+              
+              // Persist to localStorage
+              const file = files.find(f => f.id === id);
+              if (file && walletAddress) {
+                const storageKey = `shelby_perm_${walletAddress}_${file.name}`;
+                localStorage.setItem(storageKey, JSON.stringify(newConfig));
               }
             }}
           />

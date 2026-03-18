@@ -30,6 +30,7 @@ interface ShelbyVaultTableProps {
   onDownload?: (id: number) => void;
   onDelete?: (id: number) => void;
   onManagePermission?: (id: number) => void;
+  onPermissionChange?: (id: number, config: any) => void;
   isLoading?: boolean;
   error?: string | null;
   walletConnected?: boolean;
