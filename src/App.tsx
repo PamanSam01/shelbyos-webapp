@@ -112,8 +112,18 @@ function App() {
     try {
       const { ShelbyClient } = await import('@shelby-protocol/sdk/browser') as any;
       const { Network } = await import('@aptos-labs/ts-sdk');
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      
+      const getRandomKey = (str?: string) => {
+        if (!str) return undefined;
+        const keys = str.split(',').map(k => k.trim()).filter(Boolean);
+        return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : undefined;
+      };
+
+      const SHELBYNET_KEY = getRandomKey(rawShelbyNetKey);
+      const TESTNET_KEY   = getRandomKey(rawTestnetKey);
+      
       const isOnShelbyNet = activeNetKey === "shelbynet";
 
       const apiKeyToUse = isOnShelbyNet ? SHELBYNET_KEY : (TESTNET_KEY || SHELBYNET_KEY);
@@ -595,8 +605,18 @@ function App() {
       console.log("Blobs registered on-chain:", txHash);
       
       // Step 3: Stream to RPC sequentially
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      
+      const getRandomKey = (str?: string) => {
+        if (!str) return undefined;
+        const keys = str.split(',').map(k => k.trim()).filter(Boolean);
+        return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : undefined;
+      };
+
+      const SHELBYNET_KEY = getRandomKey(rawShelbyNetKey);
+      const TESTNET_KEY   = getRandomKey(rawTestnetKey);
+      
       const isOnShelbyNet = activeNetKey === "shelbynet";
       
       if (isOnShelbyNet && !SHELBYNET_KEY) throw new Error("Missing ShelbyNet API key");
