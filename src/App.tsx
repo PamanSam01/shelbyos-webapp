@@ -114,7 +114,9 @@ function App() {
   };
 
   // Helper: Fetch vault history from auth-free Aptos REST API
-  // Tries both raw address and padded address, decodes hex names, filters deleted blobs.
+  // Step 1: Get candidate blobs from transaction history
+  // Step 2: ON-CHAIN LOCK - verify each blob against get_blob_metadata view (auth-free)
+  // Files deleted on-chain return {vec:[]} and are automatically excluded.
   const fetchVaultHistory = useCallback(async () => {
     if (!walletAddress || !ACTIVE_NET) return;
 
@@ -123,6 +125,7 @@ function App() {
 
     try {
       const aptosRpc = ACTIVE_NET.aptosRpc;
+      const deployer = (ACTIVE_NET as any).deployer || ACTIVE_NET.contract;
       const pageSize = 100;
 
       // Try both rawAddress and walletAddress to handle Google Keyless short addresses
@@ -135,7 +138,7 @@ function App() {
         const fetched: any[] = [];
         let start: number | undefined = undefined;
 
-        for (let page = 0; page < 3; page++) {
+        for (let page = 0; page < 5; page++) {
           const url = start !== undefined
             ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
             : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
@@ -149,8 +152,7 @@ function App() {
           const relevant = txns.filter((tx: any) => {
             if (tx.type !== 'user_transaction') return false;
             const fn: string = tx.payload?.function ?? '';
-            return fn.includes('register_blob') || fn.includes('register_multiple_blobs') ||
-                   fn.includes('delete_blob') || fn.includes('delete_multiple_blobs');
+            return fn.includes('register_blob') || fn.includes('register_multiple_blobs');
           });
           fetched.push(...relevant);
 
@@ -163,7 +165,7 @@ function App() {
         if (fetched.length > 0) {
           allBlobTxs = fetched;
           usedAddr = addr;
-          console.log(`[Vault] Found ${fetched.length} blob txs for address: ${addr}`);
+          console.log(`[Vault] Found ${fetched.length} register txs for address: ${addr}`);
           break;
         }
       }
@@ -173,29 +175,17 @@ function App() {
         return;
       }
 
-      // Sort oldest first so we can track register/delete order correctly
+      // Sort oldest first
       allBlobTxs.sort((a: any, b: any) => parseInt(a.version) - parseInt(b.version));
 
-      // Build a set of deleted blob names (decoded)
+      // Build a map of all blob registrations (newest overrides duplicate names)
       const registeredMap = new Map<string, any>(); // name -> tx record
 
       for (const tx of allBlobTxs) {
         const fn: string = tx.payload?.function ?? '';
         const args: any[] = tx.payload?.arguments ?? [];
 
-        if (fn.includes('delete_blob') && !fn.includes('multiple')) {
-          const rawName = args[0];
-          if (typeof rawName === 'string') {
-            const name = decodeHexName(rawName);
-            registeredMap.delete(name);
-          }
-        } else if (fn.includes('delete_multiple_blobs')) {
-          const names: any[] = Array.isArray(args[0]) ? args[0] : [];
-          for (const rawName of names) {
-            if (typeof rawName === 'string') registeredMap.delete(decodeHexName(rawName));
-          }
-        } else if (fn.includes('register_multiple_blobs')) {
-          // args[0] = array of blob names, args[n] = sizes
+        if (fn.includes('register_multiple_blobs')) {
           const names: string[] = Array.isArray(args[0]) ? args[0] : [];
           const sizes: any[] = Array.isArray(args[3]) ? args[3] : (Array.isArray(args[4]) ? args[4] : []);
           names.forEach((rawName, i) => {
@@ -213,11 +203,51 @@ function App() {
         }
       }
 
-      console.log(`[Vault] Active blobs after deletion filtering: ${registeredMap.size}`);
+      console.log(`[Vault] Candidates from tx history: ${registeredMap.size}`);
 
-      // Convert to StoredFile[] - newest first
-      const entries = Array.from(registeredMap.values()).reverse();
-      const history: StoredFile[] = entries.map(({ tx, name, size }) => {
+      // === ON-CHAIN LOCK ===
+      // Verify each candidate with get_blob_metadata view function.
+      // This is auth-free and directly reflects the blockchain state.
+      // Deleted blobs return {vec:[]} and are excluded.
+      const verifiedEntries: any[] = [];
+
+      await Promise.all(
+        Array.from(registeredMap.values()).map(async (entry) => {
+          try {
+            const blobKey = `${usedAddr}/${entry.name}`;
+            const viewRes = await fetch(`${aptosRpc}/view`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                function: `${deployer}::blob_metadata::get_blob_metadata`,
+                type_arguments: [],
+                arguments: [blobKey],
+              }),
+            });
+            if (!viewRes.ok) return;
+            const viewData: any[] = await viewRes.json().catch(() => []);
+            // viewData[0].vec is non-empty only when the blob exists on-chain
+            const exists = Array.isArray(viewData) && viewData[0]?.vec?.length > 0;
+            if (exists) {
+              const meta = viewData[0].vec[0];
+              entry.size = parseInt(meta?.size ?? entry.size) || entry.size;
+              verifiedEntries.push(entry);
+            } else {
+              console.log(`[Vault Lock] Filtered deleted blob: ${entry.name}`);
+            }
+          } catch {
+            // On error, include optimistically (fail-open)
+            verifiedEntries.push(entry);
+          }
+        })
+      );
+
+      console.log(`[Vault] Verified on-chain blobs: ${verifiedEntries.length}`);
+
+      // Sort newest first
+      verifiedEntries.sort((a, b) => parseInt(b.tx.version) - parseInt(a.tx.version));
+
+      const history: StoredFile[] = verifiedEntries.map(({ tx, name, size }) => {
         const tsMicro = parseInt(tx.timestamp) || 0;
         const d = new Date(tsMicro / 1000);
         const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
@@ -258,6 +288,8 @@ function App() {
       setIsHistoryLoading(false);
     }
   }, [walletAddress, rawAddress, ACTIVE_NET, activeNetKey]);
+
+
 
   // Fetch history when wallet connects
   useEffect(() => {
