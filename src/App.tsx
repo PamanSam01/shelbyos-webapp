@@ -163,59 +163,75 @@ function App() {
           }
         }
 
-        // Filter out deletions and already-deleted blobs
-        const activeBlobTxs = allBlobTxs.filter((tx: any) => {
+        // Filter out deletions to only keep register blobs
+        const registerTxs = allBlobTxs.filter((tx: any) => {
           const fn: string = tx.payload?.function ?? '';
-          if (fn.includes('delete_blob') || fn.includes('delete_multiple_blobs')) return false;
-          
-          const args: any[] = tx.payload?.arguments ?? [];
-          let name = 'Vault Asset';
-          if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
-            name = args[0];
-          }
-          return !deletedBlobNames.has(name);
+          return !fn.includes('delete_blob') && !fn.includes('delete_multiple_blobs');
         });
 
-        const history: StoredFile[] = activeBlobTxs.map((tx: any) => {
+        const history: StoredFile[] = registerTxs.flatMap((tx: any) => {
           const args: any[] = tx.payload?.arguments ?? [];
-
-          // args[0] is the blob name — it's a plain decoded string from the Aptos API
-          // (NOT hex, it's already decoded by the Aptos node)
-          let name = 'Vault Asset';
-          if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
-            // Sometimes short pure-hex-looking strings are names, so use as-is
-            name = args[0];
-          }
-
-          // args[4] is size in bytes (confirmed from live test: index 4)
-          let size = 0;
-          if (args.length >= 5 && args[4] !== undefined) {
-            size = parseInt(args[4]) || 0;
-          } else if (args.length >= 4) {
-            size = parseInt(args[3]) || 0;
-          }
+          const fn: string = tx.payload?.function ?? '';
 
           // Timestamp from Aptos is in microseconds
           const tsMicro = parseInt(tx.timestamp) || 0;
           const d = new Date(tsMicro / 1000);
-          const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
 
-          return {
-            id: tx.version,
-            name,
-            ext,
-            size,
-            date: d.toISOString().split('T')[0],
-            time: d.toTimeString().slice(0, 5),
-            uploader: addr,
-            status: 'stored' as const,
-            vis: 'public' as any,
-            permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-            network: ACTIVE_NET.label,
-            cid: name,
-            txHash: tx.hash || '',
-          };
-        });
+          if (fn.includes('register_multiple_blobs') && Array.isArray(args[0])) {
+            const names: string[] = args[0];
+            const sizes: any[] = args.length >= 5 && Array.isArray(args[4]) ? args[4]
+                                : args.length >= 4 && Array.isArray(args[3]) ? args[3] : [];
+            
+            return names.map((name, i) => {
+              const size = parseInt(sizes[i]) || 0;
+              const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+              return {
+                id: Number(tx.version) + (i * 0.001), // ensure unique ID per file within tx
+                name,
+                ext,
+                size,
+                date: d.toISOString().split('T')[0],
+                time: d.toTimeString().slice(0, 5),
+                uploader: addr,
+                status: 'stored' as const,
+                vis: 'public' as any,
+                permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
+                network: ACTIVE_NET.label,
+                cid: name,
+                txHash: tx.hash || '',
+              };
+            });
+          } else {
+            let name = 'Vault Asset';
+            if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
+              name = args[0];
+            }
+
+            let size = 0;
+            if (args.length >= 5 && args[4] !== undefined) {
+              size = parseInt(args[4]) || 0;
+            } else if (args.length >= 4) {
+              size = parseInt(args[3]) || 0;
+            }
+            const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+
+            return [{
+              id: tx.version,
+              name,
+              ext,
+              size,
+              date: d.toISOString().split('T')[0],
+              time: d.toTimeString().slice(0, 5),
+              uploader: addr,
+              status: 'stored' as const,
+              vis: 'public' as any,
+              permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
+              network: ACTIVE_NET.label,
+              cid: name,
+              txHash: tx.hash || '',
+            }];
+          }
+        }).filter(file => !deletedBlobNames.has(file.name));
 
 // Restore saved permission labels from localStorage
         const historyWithPerms = history.map(f => {
