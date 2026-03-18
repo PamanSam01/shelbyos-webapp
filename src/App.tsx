@@ -803,7 +803,7 @@ function App() {
       return;
     }
     
-    if (!walletAddress || !signAndSubmitTransaction) {
+    if (!walletAddress || (!signAndSubmitTransaction && manualWalletId !== 'Martian')) {
       showToast('⚠ Connect a wallet to clear history on-chain', 'error');
       return;
     }
@@ -1139,7 +1139,7 @@ function App() {
   // ── Delete blob on-chain ───────────────────────────────────────────────────
   const handleDeleteFile = async (id: number) => {
     const f = files.find(s => s.id === id);
-    if (!f || !walletAddress || !signAndSubmitTransaction) {
+    if (!f || !walletAddress || (!signAndSubmitTransaction && manualWalletId !== 'Martian')) {
       showToast('Cannot delete: wallet not connected', 'error');
       return;
     }
