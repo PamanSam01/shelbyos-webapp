@@ -131,10 +131,9 @@ function App() {
       const shelbyClient = new ShelbyClient({
         network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
         apiKey: apiKeyToUse,
-        ...(isOnShelbyNet && {
-          fullnode: ACTIVE_NET.aptosRpc,
-          shelbynode: ACTIVE_NET.shelbyRpc,
-        })
+        aptos: { fullnode: ACTIVE_NET.aptosRpc },
+        rpc: { baseUrl: ACTIVE_NET.shelbyRpc },
+        indexer: { baseUrl: ACTIVE_NET.shelbyIndexer },
       } as any);
 
       // Fetch the verified on-chain state of blobs for this account
@@ -626,10 +625,9 @@ function App() {
       const shelbyClient = new ShelbyClient({
         network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
         apiKey: apiKeyToUse,
-        ...(isOnShelbyNet && {
-          fullnode: ACTIVE_NET.aptosRpc,
-          shelbynode: ACTIVE_NET.shelbyRpc,
-        })
+        aptos: { fullnode: ACTIVE_NET.aptosRpc },
+        rpc: { baseUrl: ACTIVE_NET.shelbyRpc },
+        indexer: { baseUrl: ACTIVE_NET.shelbyIndexer },
       } as any);
 
       let done = 0;
