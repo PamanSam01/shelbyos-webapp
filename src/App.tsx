@@ -23,6 +23,7 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
+import DashboardOverview from './components/DashboardOverview'
 
 const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 if (!API_KEY) {
@@ -1121,6 +1122,7 @@ function App() {
           }}
         />
         <div className="layout">
+          {walletConnected && <DashboardOverview files={files} />}
           <VaultTable
             files={files}
             checkedIds={checkedIds}
