@@ -116,16 +116,16 @@ function App() {
       const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
       const isOnShelbyNet = activeNetKey === "shelbynet";
 
-      const shelbyClient = isOnShelbyNet && SHELBYNET_KEY
-        ? new ShelbyClient({
-            network: Network.SHELBYNET,
-            apiKey: SHELBYNET_KEY,
-            fullnode: ACTIVE_NET.aptosRpc,
-            shelbynode: ACTIVE_NET.shelbyRpc,
-          } as any)
-        : TESTNET_KEY
-        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
+      const apiKeyToUse = isOnShelbyNet ? SHELBYNET_KEY : (TESTNET_KEY || SHELBYNET_KEY);
+      
+      const shelbyClient = new ShelbyClient({
+        network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
+        apiKey: apiKeyToUse,
+        ...(isOnShelbyNet && {
+          fullnode: ACTIVE_NET.aptosRpc,
+          shelbynode: ACTIVE_NET.shelbyRpc,
+        })
+      } as any);
 
       // Fetch the verified on-chain state of blobs for this account
       const accountBlobs = await shelbyClient.coordination.getAccountBlobs({
@@ -601,16 +601,16 @@ function App() {
       
       if (isOnShelbyNet && !SHELBYNET_KEY) throw new Error("Missing ShelbyNet API key");
       
-      const shelbyClient = isOnShelbyNet
-        ? new ShelbyClient({
-            network: Network.SHELBYNET,
-            apiKey: SHELBYNET_KEY,
-            fullnode: ACTIVE_NET.aptosRpc,
-            shelbynode: ACTIVE_NET.shelbyRpc,
-          } as any)
-        : TESTNET_KEY
-        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
+      const apiKeyToUse = isOnShelbyNet ? SHELBYNET_KEY : (TESTNET_KEY || SHELBYNET_KEY);
+      
+      const shelbyClient = new ShelbyClient({
+        network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
+        apiKey: apiKeyToUse,
+        ...(isOnShelbyNet && {
+          fullnode: ACTIVE_NET.aptosRpc,
+          shelbynode: ACTIVE_NET.shelbyRpc,
+        })
+      } as any);
 
       let done = 0;
       for (const { item, data } of fileCommitments) {
