@@ -100,132 +100,164 @@ function App() {
   // Data State - Fixed: Initialized as empty, removed dummy data
   const [files, setFiles] = useState<StoredFile[]>([])
 
-  // Helper: Fetch vault history via direct GraphQL to the Shelby public indexer
-  // This mirrors exactly what the Shelby Explorer does, so history is always in sync.
-  const fetchVaultHistory = useCallback(async () => {
-    if (!walletAddress || !ACTIVE_NET) {
-      return;
+  // Helper: Decode a hex-encoded string (e.g. "0x747261..." -> "transcript.txt")
+  const decodeHexName = (raw: string): string => {
+    if (!raw || !raw.startsWith('0x')) return raw;
+    try {
+      const hex = raw.slice(2);
+      const bytes = new Uint8Array((hex.match(/.{1,2}/g) ?? []).map(b => parseInt(b, 16)));
+      const decoded = new TextDecoder().decode(bytes).trim();
+      return decoded.length > 0 ? decoded : raw;
+    } catch {
+      return raw;
     }
+  };
+
+  // Helper: Fetch vault history from auth-free Aptos REST API
+  // Tries both raw address and padded address, decodes hex names, filters deleted blobs.
+  const fetchVaultHistory = useCallback(async () => {
+    if (!walletAddress || !ACTIVE_NET) return;
 
     setIsHistoryLoading(true);
     setHistoryError(null);
 
     try {
-      const indexerUrl = ACTIVE_NET.shelbyIndexer;
-      const nowMicros = Date.now() * 1000;
+      const aptosRpc = ACTIVE_NET.aptosRpc;
+      const pageSize = 100;
 
-      // Pick a random API key from the comma-separated list in .env
-      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
-      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
-      const allKeys = [...rawShelbyNetKey.split(','), ...rawTestnetKey.split(',')]
-        .map(k => k.trim()).filter(Boolean);
-      const apiKey = allKeys.length > 0 ? allKeys[Math.floor(Math.random() * allKeys.length)] : '';
+      // Try both rawAddress and walletAddress to handle Google Keyless short addresses
+      const candidates = Array.from(new Set([rawAddress.toLowerCase(), walletAddress.toLowerCase()])).filter(Boolean);
 
-      const query = `
-        query getBlobs($where: blobs_bool_exp, $orderBy: [blobs_order_by!], $limit: Int, $offset: Int) {
-          blobs(where: $where, order_by: $orderBy, limit: $limit, offset: $offset) {
-            owner
-            blob_commitment
-            blob_name
-            created_at
-            expires_at
-            num_chunksets
-            is_deleted
-            is_written
-            placement_group
-            size
-            updated_at
-            slice_address
+      let allBlobTxs: any[] = [];
+      let usedAddr = walletAddress.toLowerCase();
+
+      for (const addr of candidates) {
+        const fetched: any[] = [];
+        let start: number | undefined = undefined;
+
+        for (let page = 0; page < 3; page++) {
+          const url = start !== undefined
+            ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
+            : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
+
+          const res = await fetch(url).catch(() => null);
+          if (!res || !res.ok) break;
+
+          const txns: any[] = await res.json().catch(() => []);
+          if (!Array.isArray(txns) || txns.length === 0) break;
+
+          const relevant = txns.filter((tx: any) => {
+            if (tx.type !== 'user_transaction') return false;
+            const fn: string = tx.payload?.function ?? '';
+            return fn.includes('register_blob') || fn.includes('register_multiple_blobs') ||
+                   fn.includes('delete_blob') || fn.includes('delete_multiple_blobs');
+          });
+          fetched.push(...relevant);
+
+          const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
+          if (versions.length > 0) start = Math.min(...versions) - 1;
+          else break;
+          if (start < 0 || txns.length < pageSize) break;
+        }
+
+        if (fetched.length > 0) {
+          allBlobTxs = fetched;
+          usedAddr = addr;
+          console.log(`[Vault] Found ${fetched.length} blob txs for address: ${addr}`);
+          break;
+        }
+      }
+
+      if (allBlobTxs.length === 0) {
+        setFiles([]);
+        return;
+      }
+
+      // Sort oldest first so we can track register/delete order correctly
+      allBlobTxs.sort((a: any, b: any) => parseInt(a.version) - parseInt(b.version));
+
+      // Build a set of deleted blob names (decoded)
+      const registeredMap = new Map<string, any>(); // name -> tx record
+
+      for (const tx of allBlobTxs) {
+        const fn: string = tx.payload?.function ?? '';
+        const args: any[] = tx.payload?.arguments ?? [];
+
+        if (fn.includes('delete_blob') && !fn.includes('multiple')) {
+          const rawName = args[0];
+          if (typeof rawName === 'string') {
+            const name = decodeHexName(rawName);
+            registeredMap.delete(name);
+          }
+        } else if (fn.includes('delete_multiple_blobs')) {
+          const names: any[] = Array.isArray(args[0]) ? args[0] : [];
+          for (const rawName of names) {
+            if (typeof rawName === 'string') registeredMap.delete(decodeHexName(rawName));
+          }
+        } else if (fn.includes('register_multiple_blobs')) {
+          // args[0] = array of blob names, args[n] = sizes
+          const names: string[] = Array.isArray(args[0]) ? args[0] : [];
+          const sizes: any[] = Array.isArray(args[3]) ? args[3] : (Array.isArray(args[4]) ? args[4] : []);
+          names.forEach((rawName, i) => {
+            const name = decodeHexName(rawName);
+            const size = parseInt(sizes[i]) || 0;
+            registeredMap.set(name, { tx, name, size });
+          });
+        } else if (fn.includes('register_blob')) {
+          const rawName = args[0];
+          if (typeof rawName === 'string') {
+            const name = decodeHexName(rawName);
+            const size = parseInt(args[3] ?? args[4] ?? '0') || 0;
+            registeredMap.set(name, { tx, name, size });
           }
         }
-      `;
-
-      const variables = {
-        where: {
-          expires_at: { _gte: String(nowMicros) },
-          is_deleted: { _eq: "0" },
-          owner: { _eq: walletAddress.toLowerCase() },
-        },
-        orderBy: [{ created_at: "desc" }],
-        limit: 100,
-        offset: 0,
-      };
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-      const res = await fetch(indexerUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ query, variables }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`GraphQL HTTP ${res.status}: ${res.statusText}`);
       }
 
-      const json = await res.json();
+      console.log(`[Vault] Active blobs after deletion filtering: ${registeredMap.size}`);
 
-      if (json.errors && json.errors.length > 0) {
-        throw new Error(json.errors[0]?.message || 'GraphQL error');
-      }
-
-      const blobs: any[] = json?.data?.blobs ?? [];
-      console.log(`[Vault] Shelby Indexer returned ${blobs.length} active blobs for ${walletAddress}`);
-
-      const history: StoredFile[] = blobs.map((blob: any) => {
-        // blob_name format is e.g. "@address/filename.txt" - extract suffix after "/"
-        const fullName: string = blob.blob_name || '';
-        const nameSuffix = fullName.includes('/') ? fullName.split('/').slice(1).join('/') : fullName;
-        const name = nameSuffix || 'Vault Asset';
-        const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-
-        // created_at is in microseconds (from the indexer)
-        const tsMicro = parseInt(blob.created_at) || 0;
+      // Convert to StoredFile[] - newest first
+      const entries = Array.from(registeredMap.values()).reverse();
+      const history: StoredFile[] = entries.map(({ tx, name, size }) => {
+        const tsMicro = parseInt(tx.timestamp) || 0;
         const d = new Date(tsMicro / 1000);
-
+        const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
         return {
-          id: tsMicro || Date.now() + Math.random(),
+          id: parseInt(tx.version) || Date.now() + Math.random(),
           name,
           ext,
-          size: parseInt(blob.size) || 0,
+          size,
           date: d.toISOString().split('T')[0],
           time: d.toTimeString().slice(0, 5),
-          uploader: blob.owner || walletAddress,
+          uploader: usedAddr,
           status: 'stored' as const,
           vis: 'public' as any,
           permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
           network: ACTIVE_NET.label,
           cid: name,
-          txHash: '',
+          txHash: tx.hash || '',
         };
       });
 
       // Restore saved permission labels from localStorage
       const historyWithPerms = history.map(f => {
-        const storageKey = `shelbyos_perm_${walletAddress.toLowerCase()}/${f.name}`;
-        const saved = localStorage.getItem(storageKey);
+        const saved = localStorage.getItem(`shelbyos_perm_${usedAddr}/${f.name}`);
         if (saved) {
           try {
-            const savedConfig = JSON.parse(saved);
-            return {
-              ...f,
-              permConfig: savedConfig,
-              vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any,
-            };
-          } catch { /* ignore parse errors */ }
+            const cfg = JSON.parse(saved);
+            return { ...f, permConfig: cfg, vis: cfg.type === 'public' ? 'public' : cfg.type === 'allowlist' ? 'private' : 'encrypted' as any };
+          } catch { /* ignore */ }
         }
         return f;
       });
 
       setFiles(historyWithPerms);
     } catch (err: any) {
-      console.warn('[Vault] Error fetching history from Shelby Indexer:', err?.message);
+      console.warn('[Vault] Error fetching vault history:', err?.message);
       setHistoryError(err?.message || 'Failed to sync history');
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [walletAddress, ACTIVE_NET, activeNetKey]);
+  }, [walletAddress, rawAddress, ACTIVE_NET, activeNetKey]);
 
   // Fetch history when wallet connects
   useEffect(() => {
