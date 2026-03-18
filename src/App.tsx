@@ -118,10 +118,14 @@ function App() {
       // ────────────────────────────────────────────────
       try {
         console.log('[Vault] Querying Shelby Blob Indexer for address:', addr);
-        const shelbyIdx = createShelbyIndexerClient(ACTIVE_NET.shelbyIndexer);
+        // API key is required — Shelby Indexer rejects anonymous requests
+        const shelbyApiKey = API_KEY || import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+        const shelbyIdx = createShelbyIndexerClient(ACTIVE_NET.shelbyIndexer, {
+          headers: shelbyApiKey ? { Authorization: `Bearer ${shelbyApiKey}` } : {},
+        });
         const result = await shelbyIdx.getBlobs({
           where: { owner: { _eq: addr } },
-          orderBy: [{ updated_at: 'desc' as any }], // camelCase as per SDK interface
+          orderBy: [{ updated_at: 'desc' as any }],
           limit: 100,
         });
 
