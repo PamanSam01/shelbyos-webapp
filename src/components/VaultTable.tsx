@@ -22,6 +22,8 @@ export interface StoredFile {
 
 interface VaultTableProps {
   files: StoredFile[];
+  checkedIds?: Set<number>;
+  onCheckedIdsChange?: (ids: Set<number>) => void;
   onPreview?: (id: number) => void;
   onOpenExplorer?: (id: number) => void;
   onCopyLink?: (id: number) => void;
@@ -32,14 +34,14 @@ interface VaultTableProps {
   error?: string | null;
   walletConnected?: boolean;
   onConnectWallet?: () => void;
-  checkedIds: Set<number>;
-  onCheckedIdsChange: (ids: Set<number>) => void;
 }
 
 const PAGE_SIZE = 10;
 
 const VaultTable: React.FC<VaultTableProps> = ({
   files,
+  checkedIds: propsCheckedIds,
+  onCheckedIdsChange,
   onPreview,
   onOpenExplorer,
   onCopyLink,
@@ -50,11 +52,17 @@ const VaultTable: React.FC<VaultTableProps> = ({
   error,
   walletConnected,
   onConnectWallet,
-  checkedIds,
-  onCheckedIdsChange,
 }) => {
   const [searchQuery, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [internalCheckedIds, setInternalCheckedIds] = useState<Set<number>>(new Set());
+  
+  const checkedIds = propsCheckedIds || internalCheckedIds;
+  const setCheckedIds = (ids: Set<number>) => {
+    if (onCheckedIdsChange) onCheckedIdsChange(ids);
+    else setInternalCheckedIds(ids);
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
 
   const fmtSize = (b: number) => {
@@ -97,7 +105,7 @@ const VaultTable: React.FC<VaultTableProps> = ({
     const newChecked = new Set(checkedIds);
     if (newChecked.has(id)) newChecked.delete(id);
     else newChecked.add(id);
-    onCheckedIdsChange(newChecked);
+    setCheckedIds(newChecked);
   };
 
   return (
