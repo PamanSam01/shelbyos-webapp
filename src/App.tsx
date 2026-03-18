@@ -263,7 +263,21 @@ function App() {
           }
         }
 
-        const history: StoredFile[] = activeBlobs.map((item: any) => {
+        const currentMicros = Date.now() * 1000;
+
+        const history: StoredFile[] = activeBlobs
+          .filter((item: any) => {
+            const args: any[] = item.tx.payload?.arguments ?? [];
+            const expirationStr = args[1];
+            if (expirationStr) {
+               const expiration = parseInt(expirationStr);
+               if (!isNaN(expiration) && expiration < currentMicros) {
+                 return false; // Expired!
+               }
+            }
+            return true;
+          })
+          .map((item: any) => {
           const tx = item.tx;
           const name = item.nameOverride;
           const size = parseInt(item.sizeOverride) || parseInt(item.tx.payload?.arguments?.[3]) || 0;
