@@ -1190,17 +1190,13 @@ function App() {
           onCopyLink={() => showToast('Link copied', 'success')}
         />
 
-        <FilePreviewModal 
+        <FilePreviewModal
           isOpen={isPreviewModalOpen}
           onClose={() => setIsPreviewModalOpen(false)}
           file={selectedFile}
-          onDownload={() => {
-            if (!selectedFile?.previewUrl) return;
-            const a = document.createElement('a');
-            a.href = selectedFile.previewUrl;
-            a.download = selectedFile.name;
-            a.click();
-          }}
+          shelbyRpcUrl={ACTIVE_NET.shelbyRpc}
+          ownerAddress={walletAddress}
+          onDownload={() => selectedFile && handleDownloadFile(selectedFile.id)}
         />
 
         <AccessDeniedModal 
