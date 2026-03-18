@@ -110,53 +110,65 @@ function App() {
     setHistoryError(null);
 
     try {
-      const addr = walletAddress.toLowerCase();
+      const candidates = Array.from(new Set([
+        rawAddress.toLowerCase(),
+        walletAddress.toLowerCase()
+      ])).filter(Boolean);
+
+      let allBlobTxs: any[] = [];
       const aptosRpc = ACTIVE_NET.aptosRpc;
+      let successfulAddr = walletAddress.toLowerCase();
 
-      // Fetch transactions with pagination (up to 200)
-      const allBlobTxs: any[] = [];
-      const pageSize = 100;
-      let start: number | undefined = undefined;
+      for (const addr of candidates) {
+        allBlobTxs = [];
+        const pageSize = 100;
+        let start: number | undefined = undefined;
 
-      for (let page = 0; page < 2; page++) {
-        const url = start !== undefined
-          ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
-          : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
+        for (let page = 0; page < 2; page++) {
+          const url = start !== undefined
+            ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
+            : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
 
-        const res = await fetch(url).catch(() => null);
-        if (!res || !res.ok) break;
+          const res = await fetch(url).catch(() => null);
+          if (!res || !res.ok) break;
 
-        const txns: any[] = await res.json().catch(() => []);
-        if (!Array.isArray(txns) || txns.length === 0) break;
+          const txns: any[] = await res.json().catch(() => []);
+          if (!Array.isArray(txns) || txns.length === 0) break;
 
-        // Filter for blob registrations and deletions
-        const relevantTxs = txns.filter((tx: any) => {
-          if (tx.type !== 'user_transaction') return false;
-          const fn: string = tx.payload?.function ?? '';
-          return fn.includes('register_blob') || 
-                 fn.includes('register_multiple_blobs') || 
-                 fn.includes('::storage::') || 
-                 fn.includes('delete_blob') || 
-                 fn.includes('delete_multiple_blobs');
-        });
-        allBlobTxs.push(...relevantTxs);
+          const relevantTxs = txns.filter((tx: any) => {
+            if (tx.type !== 'user_transaction') return false;
+            const fn: string = tx.payload?.function ?? '';
+            return fn.includes('register_blob') || 
+                   fn.includes('register_multiple_blobs') || 
+                   fn.includes('::storage::') || 
+                   fn.includes('delete_blob') || 
+                   fn.includes('delete_multiple_blobs');
+          });
+          allBlobTxs.push(...relevantTxs);
 
-        // Get lowest version for next page
-        const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-        if (versions.length > 0) {
-          start = Math.min(...versions) - 1;
-        } else {
-          break;
+          const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
+          if (versions.length > 0) {
+            start = Math.min(...versions) - 1;
+          } else {
+            break;
+          }
+          if (start < 0) break;
+          if (txns.length < pageSize) break;
         }
-        if (start < 0) break;
-        if (txns.length < pageSize) break; // Reached the end
+
+        if (allBlobTxs.length > 0) {
+          console.log(`[Vault] Found ${allBlobTxs.length} blob txs using address ${addr}`);
+          successfulAddr = addr;
+          break; // Stop at first successful address
+        }
       }
       
-      console.log(`[Vault] Found ${allBlobTxs.length} blob-related transactions via Aptos REST API`);
+      console.log(`[Vault] Total blob-related transactions: ${allBlobTxs.length}`);
 
       if (allBlobTxs.length > 0) {
         // Sort newest first
         allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
+
 
         // Identify deleted blobs
         const deletedBlobNames = new Set<string>();
@@ -199,7 +211,7 @@ function App() {
                 size,
                 date: d.toISOString().split('T')[0],
                 time: d.toTimeString().slice(0, 5),
-                uploader: addr,
+                uploader: successfulAddr,
                 status: 'stored' as const,
                 vis: 'public' as any,
                 permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
@@ -229,7 +241,7 @@ function App() {
               size,
               date: d.toISOString().split('T')[0],
               time: d.toTimeString().slice(0, 5),
-              uploader: addr,
+              uploader: successfulAddr,
               status: 'stored' as const,
               vis: 'public' as any,
               permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
@@ -242,7 +254,7 @@ function App() {
 
 // Restore saved permission labels from localStorage
         const historyWithPerms = history.map(f => {
-          const storageKey = `shelbyos_perm_${addr}/${f.name}`;
+          const storageKey = `shelbyos_perm_${successfulAddr}/${f.name}`;
           const saved = localStorage.getItem(storageKey);
           if (saved) {
             try {
