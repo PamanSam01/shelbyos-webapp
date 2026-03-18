@@ -40,10 +40,8 @@ function App() {
   
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
-  const [martianAddress, setMartianAddress] = useState<string>('');
   const walletConnected = connected || manualWalletId !== null;
-  const rawAddress = account?.address?.toString()
-    || (manualWalletId === 'Martian' ? martianAddress || (window as any).martian?.selectedAccount?.address || '' : '');
+  const rawAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
   // Pad the address to 64 characters to support Google Keyless accounts without leading zeros
   const walletAddress = rawAddress ? '0x' + (rawAddress.startsWith('0x') ? rawAddress.slice(2) : rawAddress).padStart(64, '0').toLowerCase() : '';
   
@@ -100,225 +98,170 @@ function App() {
   // Data State - Fixed: Initialized as empty, removed dummy data
   const [files, setFiles] = useState<StoredFile[]>([])
 
-  // Helper: Decode a hex-encoded string (e.g. "0x747261..." -> "transcript.txt")
-  const decodeHexName = (raw: string): string => {
-    if (!raw || !raw.startsWith('0x')) return raw;
-    try {
-      const hex = raw.slice(2);
-      const bytes = new Uint8Array((hex.match(/.{1,2}/g) ?? []).map(b => parseInt(b, 16)));
-      const decoded = new TextDecoder().decode(bytes).trim();
-      return decoded.length > 0 ? decoded : raw;
-    } catch {
-      return raw;
-    }
-  };
-
-  // Fetch vault history using auth-free Aptos public GraphQL + REST hybrid.
-  // Step 1: Aptos Public GQL (no auth) -> account_transactions by version
-  //         This captures Google Keyless sponsored transactions that the REST
-  //         /accounts/{addr}/transactions endpoint misses.
-  // Step 2: REST /transactions/by_version/{v} -> get blob args for register/delete txs.
-  // Step 3: Build registeredMap tracking register/delete order to get final active set.
+  // Helper: Fetch vault history from Aptos REST API (no auth needed, pagination supported)
   const fetchVaultHistory = useCallback(async () => {
-    if (!walletAddress || !ACTIVE_NET) return;
+    if (!walletAddress || !ACTIVE_NET) {
+      return;
+    }
+
     setIsHistoryLoading(true);
     setHistoryError(null);
 
     try {
+      const addr = walletAddress.toLowerCase();
       const aptosRpc = ACTIVE_NET.aptosRpc;
-      const aptosGql = `${aptosRpc}/graphql`;
 
-      // Google Keyless accounts can have both a full AA address and a short address.
-      // We try both to ensure we catch all transactions.
-      const rawAddr = walletAddress.length > 66 ? '0x' + walletAddress.slice(-64) : walletAddress;
-      const addrCandidates = Array.from(
-        new Set([walletAddress.toLowerCase(), rawAddr.toLowerCase()])
-      );
+      // Fetch transactions with pagination (up to 200)
+      const allBlobTxs: any[] = [];
+      const pageSize = 100;
+      let start: number | undefined = undefined;
 
-      const BLOB_FNS = ['register_blob', 'register_multiple_blobs', 'delete_blob', 'delete_multiple_blobs'];
+      for (let page = 0; page < 2; page++) {
+        const url = start !== undefined
+          ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
+          : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
 
-      let blobVersions: { version: number; fnStr: string }[] = [];
-      let usedAddr = walletAddress.toLowerCase();
+        const res = await fetch(url).catch(() => null);
+        if (!res || !res.ok) break;
 
-      // Step 1: Fetch all transaction versions for each candidate address via public GQL
-      for (const addr of addrCandidates) {
-        const gqlRes = await fetch(aptosGql, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: `{
-              account_transactions(
-                where: { account_address: { _eq: "${addr}" } }
-                limit: 200
-                order_by: { transaction_version: asc }
-              ) {
-                transaction_version
-              }
-            }`
-          })
-        }).catch(() => null);
+        const txns: any[] = await res.json().catch(() => []);
+        if (!Array.isArray(txns) || txns.length === 0) break;
 
-        if (!gqlRes || !gqlRes.ok) continue;
-        const gqlData = await gqlRes.json().catch(() => null);
-        const versions: number[] = (gqlData?.data?.account_transactions ?? []).map((t: any) => t.transaction_version);
+        // Filter for blob registrations and deletions
+        const relevantTxs = txns.filter((tx: any) => {
+          if (tx.type !== 'user_transaction') return false;
+          const fn: string = tx.payload?.function ?? '';
+          return fn.includes('register_blob') || 
+                 fn.includes('register_multiple_blobs') || 
+                 fn.includes('::storage::') || 
+                 fn.includes('delete_blob') || 
+                 fn.includes('delete_multiple_blobs');
+        });
+        allBlobTxs.push(...relevantTxs);
 
-        if (versions.length === 0) continue;
-
-        // Step 2: Fetch each transaction by version and filter for blob functions
-        // Batch to avoid too many parallel requests
-        const BATCH = 10;
-        for (let i = 0; i < versions.length; i += BATCH) {
-          const batch = versions.slice(i, i + BATCH);
-          const results = await Promise.all(
-            batch.map(async (v) => {
-              const res = await fetch(`${aptosRpc}/transactions/by_version/${v}`).catch(() => null);
-              if (!res || !res.ok) return null;
-              return res.json().catch(() => null);
-            })
-          );
-          for (const tx of results) {
-            if (!tx) continue;
-            const fn: string = tx.payload?.function ?? '';
-            if (BLOB_FNS.some(f => fn.includes(f))) {
-              blobVersions.push({ version: parseInt(tx.version), fnStr: fn });
-            }
-          }
-        }
-
-        if (blobVersions.length > 0) {
-          usedAddr = addr;
-          console.log(`[Vault] Found ${blobVersions.length} blob txs via GQL+REST for ${addr}`);
+        // Get lowest version for next page
+        const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
+        if (versions.length > 0) {
+          start = Math.min(...versions) - 1;
+        } else {
           break;
         }
+        if (start < 0) break;
+        if (txns.length < pageSize) break; // Reached the end
       }
+      
+      console.log(`[Vault] Found ${allBlobTxs.length} blob-related transactions via Aptos REST API`);
 
-      // Fallback: use REST /accounts/{addr}/transactions (catches self-signed txs)
-      if (blobVersions.length === 0) {
-        for (const addr of addrCandidates) {
-          let start: number | undefined;
-          const fetched: any[] = [];
-          for (let page = 0; page < 5; page++) {
-            const url = start !== undefined
-              ? `${aptosRpc}/accounts/${addr}/transactions?limit=100&start=${start}`
-              : `${aptosRpc}/accounts/${addr}/transactions?limit=100`;
-            const res = await fetch(url).catch(() => null);
-            if (!res || !res.ok) break;
-            const txns: any[] = await res.json().catch(() => []);
-            if (!Array.isArray(txns) || txns.length === 0) break;
-            const relevant = txns.filter((tx: any) => {
-              if (tx.type !== 'user_transaction') return false;
-              const fn: string = tx.payload?.function ?? '';
-              return BLOB_FNS.some(f => fn.includes(f));
-            });
-            fetched.push(...relevant);
-            const vs = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-            if (vs.length > 0) start = Math.min(...vs) - 1; else break;
-            if (start < 0 || txns.length < 100) break;
-          }
-          if (fetched.length > 0) {
-            blobVersions = fetched.map(tx => ({ version: parseInt(tx.version), fnStr: tx.payload?.function ?? '' }));
-            usedAddr = addr;
-            break;
+      if (allBlobTxs.length > 0) {
+        // Sort newest first
+        allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
+
+        // Identify deleted blobs
+        const deletedBlobNames = new Set<string>();
+        for (const tx of allBlobTxs) {
+          const fn: string = tx.payload?.function ?? '';
+          const args: any[] = tx.payload?.arguments ?? [];
+          if (fn.includes('delete_blob') && args.length >= 1 && typeof args[0] === 'string') {
+            deletedBlobNames.add(args[0]);
+          } else if (fn.includes('delete_multiple_blobs') && args.length >= 1 && Array.isArray(args[0])) {
+            args[0].forEach((name: string) => deletedBlobNames.add(name));
           }
         }
-      }
 
-      if (blobVersions.length === 0) {
-        setFiles([]);
+        // Filter out deletions to only keep register blobs
+        const registerTxs = allBlobTxs.filter((tx: any) => {
+          const fn: string = tx.payload?.function ?? '';
+          return !fn.includes('delete_blob') && !fn.includes('delete_multiple_blobs');
+        });
+
+        const history: StoredFile[] = registerTxs.flatMap((tx: any) => {
+          const args: any[] = tx.payload?.arguments ?? [];
+          const fn: string = tx.payload?.function ?? '';
+
+          // Timestamp from Aptos is in microseconds
+          const tsMicro = parseInt(tx.timestamp) || 0;
+          const d = new Date(tsMicro / 1000);
+
+          if (fn.includes('register_multiple_blobs') && Array.isArray(args[0])) {
+            const names: string[] = args[0];
+            const sizes: any[] = args.length >= 5 && Array.isArray(args[4]) ? args[4]
+                                : args.length >= 4 && Array.isArray(args[3]) ? args[3] : [];
+            
+            return names.map((name, i) => {
+              const size = parseInt(sizes[i]) || 0;
+              const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+              return {
+                id: Number(tx.version) + (i * 0.001), // ensure unique ID per file within tx
+                name,
+                ext,
+                size,
+                date: d.toISOString().split('T')[0],
+                time: d.toTimeString().slice(0, 5),
+                uploader: addr,
+                status: 'stored' as const,
+                vis: 'public' as any,
+                permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
+                network: ACTIVE_NET.label,
+                cid: name,
+                txHash: tx.hash || '',
+              };
+            });
+          } else {
+            let name = 'Vault Asset';
+            if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
+              name = args[0];
+            }
+
+            let size = 0;
+            if (args.length >= 5 && args[4] !== undefined) {
+              size = parseInt(args[4]) || 0;
+            } else if (args.length >= 4) {
+              size = parseInt(args[3]) || 0;
+            }
+            const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+
+            return [{
+              id: tx.version,
+              name,
+              ext,
+              size,
+              date: d.toISOString().split('T')[0],
+              time: d.toTimeString().slice(0, 5),
+              uploader: addr,
+              status: 'stored' as const,
+              vis: 'public' as any,
+              permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
+              network: ACTIVE_NET.label,
+              cid: name,
+              txHash: tx.hash || '',
+            }];
+          }
+        }).filter(file => !deletedBlobNames.has(file.name));
+
+// Restore saved permission labels from localStorage
+        const historyWithPerms = history.map(f => {
+          const storageKey = `shelbyos_perm_${addr}/${f.name}`;
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            try {
+              const savedConfig = JSON.parse(saved);
+              return {
+                ...f,
+                permConfig: savedConfig,
+                vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any,
+              };
+            } catch { /* ignore parse errors */ }
+          }
+          return f;
+        });
+
+        setFiles(historyWithPerms);
         return;
       }
 
-      // Step 3: Fetch full transaction payload for each blob version
-      const allBlobTxs: any[] = [];
-      const BATCH2 = 10;
-      for (let i = 0; i < blobVersions.length; i += BATCH2) {
-        const batch = blobVersions.slice(i, i + BATCH2);
-        const results = await Promise.all(
-          batch.map(async ({ version }) => {
-            const res = await fetch(`${aptosRpc}/transactions/by_version/${version}`).catch(() => null);
-            if (!res || !res.ok) return null;
-            return res.json().catch(() => null);
-          })
-        );
-        allBlobTxs.push(...results.filter(Boolean));
-      }
+      // Nothing found — keep any locally-added files
+      console.warn('[Vault] No blob transactions found for this address on current network.');
 
-      // Sort oldest-first to track register/delete order correctly
-      allBlobTxs.sort((a, b) => parseInt(a.version) - parseInt(b.version));
-
-      const registeredMap = new Map<string, any>();
-      for (const tx of allBlobTxs) {
-        const fn: string = tx.payload?.function ?? '';
-        const args: any[] = tx.payload?.arguments ?? [];
-
-        if (fn.includes('delete_multiple_blobs')) {
-          const names: any[] = Array.isArray(args[0]) ? args[0] : [];
-          for (const rawName of names) {
-            if (typeof rawName === 'string') registeredMap.delete(decodeHexName(rawName));
-          }
-        } else if (fn.includes('delete_blob')) {
-          const rawName = args[0];
-          if (typeof rawName === 'string') registeredMap.delete(decodeHexName(rawName));
-        } else if (fn.includes('register_multiple_blobs')) {
-          const names: string[] = Array.isArray(args[0]) ? args[0] : [];
-          const sizes: any[] = Array.isArray(args[3]) ? args[3] : (Array.isArray(args[4]) ? args[4] : []);
-          names.forEach((rawName, i) => {
-            const name = decodeHexName(rawName);
-            registeredMap.set(name, { tx, name, size: parseInt(sizes[i]) || 0 });
-          });
-        } else if (fn.includes('register_blob')) {
-          const rawName = args[0];
-          if (typeof rawName === 'string') {
-            const name = decodeHexName(rawName);
-            const size = parseInt(args[3] ?? args[4] ?? '0') || 0;
-            registeredMap.set(name, { tx, name, size });
-          }
-        }
-      }
-
-      console.log(`[Vault] Active blobs after register/delete filter: ${registeredMap.size}`);
-
-      // Sort newest-first for display
-      const entries = Array.from(registeredMap.values()).reverse();
-
-      const history: StoredFile[] = entries.map(({ tx, name, size }) => {
-        const tsMicro = parseInt(tx.timestamp) || 0;
-        const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
-        const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-        return {
-          id: parseInt(tx.version) || Date.now() + Math.random(),
-          name,
-          ext,
-          size,
-          date: d.toISOString().split('T')[0],
-          time: d.toTimeString().slice(0, 5),
-          uploader: usedAddr,
-          status: 'stored' as const,
-          vis: 'public' as any,
-          permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-          network: ACTIVE_NET.label,
-          cid: name,
-          txHash: tx.hash || '',
-        };
-      });
-
-      // Restore saved permission labels from localStorage
-      const historyWithPerms = history.map(f => {
-        const saved = localStorage.getItem(`shelbyos_perm_${usedAddr}/${f.name}`);
-        if (saved) {
-          try {
-            const cfg = JSON.parse(saved);
-            return {
-              ...f,
-              permConfig: cfg,
-              vis: cfg.type === 'public' ? 'public' : cfg.type === 'allowlist' ? 'private' : 'encrypted' as any
-            };
-          } catch { /* ignore */ }
-        }
-        return f;
-      });
-
-      setFiles(historyWithPerms);
     } catch (err: any) {
       console.warn('[Vault] Error fetching vault history:', err?.message);
       setHistoryError(err?.message || 'Failed to sync history');
@@ -326,8 +269,6 @@ function App() {
       setIsHistoryLoading(false);
     }
   }, [walletAddress, ACTIVE_NET, activeNetKey]);
-
-
 
   // Fetch history when wallet connects
   useEffect(() => {
@@ -341,7 +282,7 @@ function App() {
     if (!walletConnected || !walletAddress) return;
     const pollInterval = setInterval(() => {
       fetchVaultHistory();
-    }, 60_000);
+    }, 120_000); // 120s to reduce RPC load
     return () => clearInterval(pollInterval);
   }, [walletConnected, walletAddress, fetchVaultHistory]);
 
@@ -472,13 +413,10 @@ function App() {
         if ((window as any).martian) {
           clearInterval(interval);
           try {
-          const response = await (window as any).martian.connect();
-          const addr: string = response?.address || response?.account?.address
-            || localStorage.getItem('shelbyos_martian_address') || '';
-          if (addr) {
-            setManualWalletId('Martian');
-            setMartianAddress(addr);
-          }
+            const response = await (window as any).martian.connect();
+            if (response?.address || response?.account?.address) {
+              setManualWalletId('Martian');
+            }
           } catch (err) {
             localStorage.removeItem('shelbyos_martian_connected');
           }
@@ -521,12 +459,9 @@ function App() {
           return;
         }
         const response = await (window as any).martian.connect();
-        const addr: string = response?.address || response?.account?.address || '';
-        if (addr) {
+        if (response?.address || response?.account?.address) {
           setManualWalletId('Martian');
-          setMartianAddress(addr);
           localStorage.setItem('shelbyos_martian_connected', 'true');
-          localStorage.setItem('shelbyos_martian_address', addr);
           showToast('Martian connected ✓', 'success');
         } else {
           showToast('Martian: no address returned', 'error');
@@ -566,9 +501,7 @@ function App() {
       if (manualWalletId === 'Martian') {
         await (window as any).martian?.disconnect();
         setManualWalletId(null);
-        setMartianAddress('');
         localStorage.removeItem('shelbyos_martian_connected');
-        localStorage.removeItem('shelbyos_martian_address');
       } else {
         await disconnect();
       }
@@ -578,26 +511,6 @@ function App() {
       showToast(`Failed to disconnect: ${err.message}`, 'error');
     }
   }
-
-  // ── Unified signing helper (Petra, Google Keyless, Martian) ────────────────
-  // Martian uses its own native API; all other wallets use the adapter's hook.
-  const signAndSubmit = async (payload: any): Promise<string> => {
-    if (manualWalletId === 'Martian') {
-      const martian = (window as any).martian;
-      if (!martian) throw new Error('Martian wallet not found');
-      const txResult = await martian.generateSignAndSubmitTransaction(walletAddress, payload);
-      // Martian returns the hash directly as a string
-      const txHash = typeof txResult === 'string' ? txResult : txResult?.hash || txResult?.result?.hash;
-      if (!txHash) throw new Error('Martian: transaction hash not returned');
-      return txHash;
-    } else {
-      if (!signAndSubmitTransaction) throw new Error('Wallet adapter not connected');
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error('Transaction hash not found');
-      return txHash;
-    }
-  };
 
   const handleApplyPermissions = (config: PermissionConfig) => {
     if (editingFileId !== null) {
@@ -685,6 +598,27 @@ function App() {
     addLog('INIT', `Initiating batch upload sequence for ${readyItems.length} file(s)...`);
     const total = readyItems.length;
 
+    // Helper: Retry on 429 or transient errors
+    const safeWaitForTransaction = async (txHash: string, maxAttempts = 5) => {
+      let attempt = 0;
+      while (attempt < maxAttempts) {
+        try {
+          return await aptos.waitForTransaction({ transactionHash: txHash });
+        } catch (err: any) {
+          attempt++;
+          const msg = err?.message || "";
+          const isRateLimit = msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("anonym");
+          if (isRateLimit && attempt < maxAttempts) {
+            const delay = attempt * 2000;
+            addLog('WAIT', `Rate limit hit on Aptos Node. Waiting ${delay/1000}s to retry confirmation...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw err;
+        }
+      }
+    };
+
     try {
       const { 
         createDefaultErasureCodingProvider, 
@@ -732,45 +666,35 @@ function App() {
         encoding: 0
       });
 
-      const txHash = await signAndSubmit(payload);
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error("Transaction hash not found after submission");
 
       showToast("Confirming on-chain registration...", "info");
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
-      await aptos.waitForTransaction({ transactionHash: txHash });
+      await safeWaitForTransaction(txHash);
       console.log("Blobs registered on-chain:", txHash);
       
       // Step 3: Stream to RPC sequentially
-      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
-      
-      const getRandomKey = (str?: string) => {
-        if (!str) return undefined;
-        const keys = str.split(',').map(k => k.trim()).filter(Boolean);
-        return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : undefined;
-      };
-
-      const SHELBYNET_KEY = getRandomKey(rawShelbyNetKey);
-      const TESTNET_KEY   = getRandomKey(rawTestnetKey);
-      
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
       const isOnShelbyNet = activeNetKey === "shelbynet";
       
       if (isOnShelbyNet && !SHELBYNET_KEY) throw new Error("Missing ShelbyNet API key");
       
-      const apiKeyToUse = isOnShelbyNet ? SHELBYNET_KEY : (TESTNET_KEY || SHELBYNET_KEY);
-      
-      const shelbyClient = new ShelbyClient({
-        network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
-        apiKey: apiKeyToUse,
-        aptos: { fullnode: ACTIVE_NET.aptosRpc },
-        rpc: { baseUrl: ACTIVE_NET.shelbyRpc },
-        indexer: { baseUrl: ACTIVE_NET.shelbyIndexer },
-      } as any);
+      const shelbyClient = isOnShelbyNet
+        ? new ShelbyClient({
+            network: Network.SHELBYNET,
+            apiKey: SHELBYNET_KEY,
+            fullnode: ACTIVE_NET.aptosRpc,
+            shelbynode: ACTIVE_NET.shelbyRpc,
+          } as any)
+        : TESTNET_KEY
+        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
+        : new ShelbyClient({ network: Network.TESTNET } as any);
 
       let done = 0;
       for (const { item, data } of fileCommitments) {
-        // Mandatory pause before each file to let RPC breathe
-        if (done > 0) await new Promise(r => setTimeout(r, 1000));
-
         setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
         addLog('SYNC', `Streaming ${item.file.name} to Decentralized Vault Nodes...`);
         
@@ -778,8 +702,7 @@ function App() {
         let attempts = 0;
         let lastErr: any = null;
 
-        const MAX_ATTEMPTS = 5;
-        while (attempts < MAX_ATTEMPTS && !success) {
+        while (attempts < 3 && !success) {
           try {
             await shelbyClient.rpc.putBlob({
               account: walletAddress,
@@ -790,14 +713,11 @@ function App() {
           } catch (rpcErr: any) {
             attempts++;
             lastErr = rpcErr;
-            const status = rpcErr?.status || 0;
-            const isRateLimit = status === 429;
-            
-            if (attempts < MAX_ATTEMPTS) {
-              const backoff = isRateLimit ? (attempts * 4000) : (attempts * 2000);
-              addLog('WARN', `${item.file.name} failed (HTTP ${status}). Retrying in ${backoff/1000}s... (${attempts}/${MAX_ATTEMPTS})`);
+            if (attempts < 3) {
+              addLog('WARN', `RPC stream failed for ${item.file.name}. Retrying (${attempts}/3).`);
               setStatusLine(`Retrying ${item.file.name}...`);
-              await new Promise(r => setTimeout(r, backoff));
+              // Delay before retry (1.5s then 3s)
+              await new Promise(r => setTimeout(r, attempts * 1500));
             }
           }
         }
@@ -848,10 +768,16 @@ function App() {
 
     } catch (err: any) {
       console.error("Batch upload pipeline error:", err);
-      const msg = err?.message || "upload_failed";
+      const msg = err?.message || String(err);
+      
+      const isRateLimit = msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("anonym") || msg.includes("SyntaxError");
+
       if (msg.includes("rejected") || msg.includes("cancel") || msg.includes("User denied")) {
         showToast("Batch upload cancelled by user", "info");
         addLog('ERR ', `Transaction cancelled by user.`);
+      } else if (isRateLimit) {
+        showToast("Aptos Node rate-limit hit. Please wait a moment.", "error");
+        addLog('ERR ', `Rate limit exceeded (429). Public RPC is busy.`);
       } else {
         showToast(`Batch upload failed: ${msg.slice(0, 80)}`, "error");
         addLog('ERR ', `Exception: ${msg.slice(0, 50)}`);
@@ -878,7 +804,7 @@ function App() {
       return;
     }
     
-    if (!walletAddress || (!signAndSubmitTransaction && manualWalletId !== 'Martian')) {
+    if (!walletAddress || !signAndSubmitTransaction) {
       showToast('⚠ Connect a wallet to clear history on-chain', 'error');
       return;
     }
@@ -899,8 +825,10 @@ function App() {
         blobNames
       });
 
-      const txHash = await signAndSubmit(payload);
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
       
+      if (!txHash) throw new Error('Transaction hash not found');
 
       showToast('Confirming mass deletion on-chain...', 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -924,35 +852,7 @@ function App() {
   }
 
 
-
   // ── Download file from Shelby network ─────────────────────────────────────
-  // Helper: try downloading with primary address, fallback to secondary
-  const fetchBlobWithFallback = async (f: StoredFile, ownerAddr: string): Promise<Blob> => {
-    const shelbyRpc = ACTIVE_NET.shelbyRpc;
-    if (!shelbyRpc) throw new Error('Shelby RPC URL not configured.');
-
-    const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
-    const headers: Record<string, string> = {};
-    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-    if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
-
-    // Primary: use the exact address the file was uploaded under
-    const primaryAddr = f.uploader || ownerAddr;
-    const primaryUrl = `${shelbyRpc}/v1/blobs/${primaryAddr}/${encodedName}`;
-    let res = await fetch(primaryUrl, { headers });
-
-    if (!res.ok && primaryAddr !== ownerAddr) {
-      // Fallback: try current wallet address
-      const fallbackUrl = `${shelbyRpc}/v1/blobs/${ownerAddr}/${encodedName}`;
-      res = await fetch(fallbackUrl, { headers });
-    }
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText} — blob not found on RPC`);
-    }
-    return res.blob();
-  };
-
   const handleDownloadFile = async (id: number) => {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) { showToast('Cannot download: wallet not connected', 'error'); return; }
@@ -961,7 +861,24 @@ function App() {
     setShowTerminal(true);
     addLog('DWNL', `Downloading ${f.name} from RPC Nodes...`);
     try {
-      const blob = await fetchBlobWithFallback(f, walletAddress);
+      const shelbyRpc = ACTIVE_NET.shelbyRpc;
+      if (!shelbyRpc) throw new Error("Shelby RPC URL not configured.");
+
+      const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+      const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
+      
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const headers: Record<string, string> = {};
+      if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
+        headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
+      }
+
+      const res = await fetch(blobUrl, { headers });
+      if (!res.ok) {
+        throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
+      }
+
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = f.name; a.click();
@@ -970,8 +887,8 @@ function App() {
       addLog('DONE', `${f.name} downloaded successfully.`);
     } catch (err: any) {
       console.error('[Vault] Download failed:', err);
-      showToast(`Download failed: ${err?.message?.slice(0, 100) || 'unknown error'}`, 'error');
-      addLog('ERR ', `Download failed: ${err?.message?.slice(0, 80)}`);
+      showToast(`Download failed: ${err?.message?.slice(0, 80) || 'unknown error'}`, 'error');
+      addLog('ERR ', `Download failed for ${f.name}.`);
     }
   };
 
@@ -987,7 +904,20 @@ function App() {
     
     for (const f of selectedFiles) {
       try {
-        const blob = await fetchBlobWithFallback(f, walletAddress);
+        const shelbyRpc = ACTIVE_NET.shelbyRpc;
+        if (!shelbyRpc) throw new Error("RPC not configured");
+        
+        const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+        const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
+        
+        const headers: Record<string, string> = {};
+        const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+        if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
+        
+        const res = await fetch(blobUrl, { headers });
+        if (!res.ok) throw new Error(`${res.status}`);
+        
+        const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = f.name; a.click();
@@ -997,9 +927,9 @@ function App() {
         addLog('SYNC', `Streamed ${f.name} from network.`);
         // Delay to prevent browser download blast throttling
         await new Promise(r => setTimeout(r, 600));
-      } catch (err: any) {
+      } catch (err) {
         console.error(`Failed to download ${f.name}`, err);
-        addLog('ERR ', `${f.name}: ${err?.message?.slice(0, 60)}`);
+        addLog('ERR ', `Stream dropped for ${f.name}.`);
       }
     }
     
@@ -1025,7 +955,9 @@ function App() {
       const blobNames = selectedFiles.map(f => f.name);
       const payload = ShelbyBlobClient.createDeleteMultipleBlobsPayload({ blobNames });
 
-      const txHash = await signAndSubmit(payload);
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error('Transaction hash not found');
 
       showToast('Confirming batch deletion on-chain...', 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -1090,12 +1022,11 @@ function App() {
     // Fetch the blob directly from the Shelby RPC REST API
     // URL format (from SDK source): {baseUrl}/v1/blobs/{account}/{blobName}
     const shelbyRpc = ACTIVE_NET.shelbyRpc;
-    if (!shelbyRpc || !walletAddress) return;
+    const addr = walletAddress;
+    if (!shelbyRpc || !addr) return;
 
     const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
-    const primaryAddr = f.uploader || walletAddress;
-    const blobUrl = `${shelbyRpc}/v1/blobs/${primaryAddr}/${encodedName}`;
-
+    const blobUrl = `${shelbyRpc}/v1/blobs/${addr}/${encodedName}`;
     const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
     const headers: Record<string, string> = {};
     if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
@@ -1103,13 +1034,7 @@ function App() {
     }
 
     try {
-      let res = await fetch(blobUrl, { headers });
-      if (!res.ok && primaryAddr !== walletAddress) {
-        // Fallback to current address
-        const fallbackUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
-        res = await fetch(fallbackUrl, { headers });
-      }
-
+      const res = await fetch(blobUrl, { headers });
       if (!res.ok) {
         console.warn(`[Vault] Preview fetch ${res.status} for ${f.name}`);
         return; // Modal already open, will just show "no preview" fallback
@@ -1137,7 +1062,7 @@ function App() {
   // ── Delete blob on-chain ───────────────────────────────────────────────────
   const handleDeleteFile = async (id: number) => {
     const f = files.find(s => s.id === id);
-    if (!f || !walletAddress || (!signAndSubmitTransaction && manualWalletId !== 'Martian')) {
+    if (!f || !walletAddress || !signAndSubmitTransaction) {
       showToast('Cannot delete: wallet not connected', 'error');
       return;
     }
@@ -1150,7 +1075,9 @@ function App() {
       addLog('WIPE', `Requesting permanent deletion for ${f.name}...`);
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
       const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: f.name });
-      const txHash = await signAndSubmit(payload);
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error('No tx hash returned after delete');
 
       showToast(`Confirming deletion on-chain…`, 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -1485,5 +1412,4 @@ function App() {
 
 export default App
 // submitTransaction removed: now using signAndSubmitTransaction directly for adapter wallets
-
 
