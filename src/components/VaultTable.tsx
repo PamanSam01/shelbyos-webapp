@@ -34,7 +34,7 @@ interface VaultTableProps {
   onConnectWallet?: () => void;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 const VaultTable: React.FC<VaultTableProps> = ({
   files,

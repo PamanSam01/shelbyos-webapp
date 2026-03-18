@@ -208,12 +208,12 @@ function App() {
     }
   }, [walletConnected, walletAddress, fetchVaultHistory]);
 
-  // Real-time polling: re-fetch vault every 30 seconds while wallet is connected
+  // Real-time polling: re-fetch vault every 60 seconds while wallet is connected
   useEffect(() => {
     if (!walletConnected || !walletAddress) return;
     const pollInterval = setInterval(() => {
       fetchVaultHistory();
-    }, 30_000);
+    }, 60_000);
     return () => clearInterval(pollInterval);
   }, [walletConnected, walletAddress, fetchVaultHistory]);
 
