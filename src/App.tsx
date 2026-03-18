@@ -113,7 +113,14 @@ function App() {
     try {
       const indexerUrl = ACTIVE_NET.shelbyIndexer;
       const nowMicros = Date.now() * 1000;
-      
+
+      // Pick a random API key from the comma-separated list in .env
+      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
+      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
+      const allKeys = [...rawShelbyNetKey.split(','), ...rawTestnetKey.split(',')]
+        .map(k => k.trim()).filter(Boolean);
+      const apiKey = allKeys.length > 0 ? allKeys[Math.floor(Math.random() * allKeys.length)] : '';
+
       const query = `
         query getBlobs($where: blobs_bool_exp, $orderBy: [blobs_order_by!], $limit: Int, $offset: Int) {
           blobs(where: $where, order_by: $orderBy, limit: $limit, offset: $offset) {
@@ -144,9 +151,12 @@ function App() {
         offset: 0,
       };
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
       const res = await fetch(indexerUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ query, variables }),
       });
 
