@@ -20,7 +20,7 @@ export interface StoredFile {
   previewUrl?: string;
 }
 
-interface VaultTableProps {
+interface ShelbyVaultTableProps {
   files: StoredFile[];
   checkedIds: Set<number>;
   onCheckedIdsChange: (ids: Set<number>) => void;
@@ -38,7 +38,7 @@ interface VaultTableProps {
 
 const PAGE_SIZE = 10;
 
-const VaultTable: React.FC<VaultTableProps> = ({
+const VaultTable: React.FC<ShelbyVaultTableProps> = ({
   files,
   checkedIds: propsCheckedIds,
   onCheckedIdsChange,
