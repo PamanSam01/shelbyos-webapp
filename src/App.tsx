@@ -126,7 +126,6 @@ function App() {
           query getBlobs($where: blobs_bool_exp) {
             blobs(where: $where) {
               blob_name
-              file_name
               file_size
               expires_at
               is_deleted
@@ -171,7 +170,7 @@ function App() {
           console.log(`[Vault] Found ${accountBlobs.length} active blobs via GraphQL Indexer`);
 
           const history: StoredFile[] = accountBlobs.map((blob: any) => {
-            const blobName: string = blob.blob_name || blob.file_name || 'Unknown';
+            const blobName: string = blob.blob_name || 'Unknown';
             const txVersion = parseInt(blob.tx_version) || 0;
             const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
             return {
