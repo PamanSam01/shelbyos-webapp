@@ -22,8 +22,8 @@ export interface StoredFile {
 
 interface VaultTableProps {
   files: StoredFile[];
-  checkedIds?: Set<number>;
-  onCheckedIdsChange?: (ids: Set<number>) => void;
+  checkedIds: Set<number>;
+  onCheckedIdsChange: (ids: Set<number>) => void;
   onPreview?: (id: number) => void;
   onOpenExplorer?: (id: number) => void;
   onCopyLink?: (id: number) => void;
