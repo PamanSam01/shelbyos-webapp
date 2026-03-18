@@ -676,16 +676,33 @@ function App() {
         setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
         addLog('SYNC', `Streaming ${item.file.name} to Decentralized Vault Nodes...`);
         
-        try {
-          await shelbyClient.rpc.putBlob({
-            account: walletAddress,
-            blobName: item.file.name,
-            blobData: data,
-          });
-          
+        let success = false;
+        let attempts = 0;
+        let lastErr: any = null;
+
+        while (attempts < 3 && !success) {
+          try {
+            await shelbyClient.rpc.putBlob({
+              account: walletAddress,
+              blobName: item.file.name,
+              blobData: data,
+            });
+            success = true;
+          } catch (rpcErr: any) {
+            attempts++;
+            lastErr = rpcErr;
+            if (attempts < 3) {
+              addLog('WARN', `RPC stream failed for ${item.file.name}. Retrying (${attempts}/3).`);
+              setStatusLine(`Retrying ${item.file.name}...`);
+              // Delay before retry (1.5s then 3s)
+              await new Promise(r => setTimeout(r, attempts * 1500));
+            }
+          }
+        }
+
+        if (success) {
           addLog('DONE', `${item.file.name} successfully encrypted and stored.`);
           
-          // Mark successful
           item.status = 'stored';
           done++;
           setOverallProgress(Math.round((done / total) * 100));
@@ -709,12 +726,15 @@ function App() {
             network: ACTIVE_NET?.label || 'Unknown',
           };
           setFiles(prev => [newStoredFile, ...prev]);
-        } catch (rpcErr: any) {
+        } else {
            item.status = 'error';
            showToast(`Upload failed for ${item.file.name}`, 'error');
-           addLog('ERR ', `RPC Error for ${item.file.name}: ${rpcErr?.message?.slice(0,50)}`);
+           addLog('ERR ', `RPC Error for ${item.file.name} after 3 retries: ${lastErr?.message?.slice(0,80)}`);
         }
+
         setUploadQueue([...uploadQueue]);
+        // Add a tiny delay between files to prevent RPC rate limiting
+        await new Promise(r => setTimeout(r, 600));
       }
       
       // Refresh history
