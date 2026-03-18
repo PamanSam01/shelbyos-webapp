@@ -740,7 +740,14 @@ function App() {
       const shelbyRpc = ACTIVE_NET.shelbyRpc;
       if (!shelbyRpc) throw new Error("Shelby RPC URL not configured.");
 
-      const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+      // Strip redundant owner address prefix if present in blob name
+      let cleanName = f.name;
+      const ownerPrefix = `@${walletAddress}/`;
+      const ownerPrefixLower = `@${walletAddress.toLowerCase()}/`;
+      if (cleanName.startsWith(ownerPrefix)) cleanName = cleanName.slice(ownerPrefix.length);
+      else if (cleanName.startsWith(ownerPrefixLower)) cleanName = cleanName.slice(ownerPrefixLower.length);
+
+      const encodedName = encodeURIComponent(cleanName).replace(/%2F/g, '/');
       const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
       
       const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
@@ -814,7 +821,14 @@ function App() {
     const addr = walletAddress;
     if (!shelbyRpc || !addr) return;
 
-    const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+    // Strip redundant owner address prefix if present in blob name
+    let cleanName = f.name;
+    const ownerPrefix = `@${addr}/`;
+    const ownerPrefixLower = `@${addr.toLowerCase()}/`;
+    if (cleanName.startsWith(ownerPrefix)) cleanName = cleanName.slice(ownerPrefix.length);
+    else if (cleanName.startsWith(ownerPrefixLower)) cleanName = cleanName.slice(ownerPrefixLower.length);
+
+    const encodedName = encodeURIComponent(cleanName).replace(/%2F/g, '/');
     const blobUrl = `${shelbyRpc}/v1/blobs/${addr}/${encodedName}`;
     const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
     const headers: Record<string, string> = {};
