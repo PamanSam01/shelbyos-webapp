@@ -797,33 +797,25 @@ function App() {
 
     showToast(`⬇ Downloading ${f.name}…`, 'info');
     try {
-      const { ShelbyClient, Network } = await import('@shelby-protocol/sdk/browser') as any;
-      const isOnShelbyNet = activeNetKey === 'shelbynet';
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const shelbyClient = isOnShelbyNet && SHELBYNET_KEY
-        ? new ShelbyClient({ network: Network.SHELBYNET, apiKey: SHELBYNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
+      const shelbyRpc = ACTIVE_NET.shelbyRpc;
+      if (!shelbyRpc) throw new Error("Shelby RPC URL not configured.");
 
-      const blob: any = await shelbyClient.rpc.getBlob({ account: walletAddress, blobName: f.name });
-      // blob.data is a ReadableStream or Uint8Array
-      let bytes: Uint8Array;
-      if (blob.data instanceof ReadableStream) {
-        const reader = blob.data.getReader();
-        const chunks: Uint8Array[] = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-        const total = chunks.reduce((s, c) => s + c.length, 0);
-        bytes = new Uint8Array(total);
-        let offset = 0;
-        for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
-      } else {
-        bytes = blob.data;
+      const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+      const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
+      
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const headers: Record<string, string> = {};
+      if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
+        headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
       }
 
-      const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer]));
+      const res = await fetch(blobUrl, { headers });
+      if (!res.ok) {
+        throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = f.name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -839,72 +831,77 @@ function App() {
     const f = files.find(s => s.id === id);
     if (!f) return;
 
-    // Check permission gate first
+    // Permission gate
     const perm = (f.permConfig && f.permConfig.type) || f.vis || 'public';
     if (perm === 'allowlist') {
       const list = (f.permConfig as any)?.allowlist || [];
       if (list.length > 0 && !list.includes(walletAddress)) {
         setAccessDeniedMsg(`Access restricted. Your wallet is not on the allowlist.`);
-        setAccessDeniedAction(null);
-        setIsAccessDeniedOpen(true);
-        return;
+        setAccessDeniedAction(null); setIsAccessDeniedOpen(true); return;
       }
     }
     if (perm === 'timelock') {
       const unlock = new Date((f.permConfig as any)?.timelock || 0);
       if (Date.now() < unlock.getTime()) {
         setAccessDeniedMsg(`File unlocks on ${unlock.toLocaleDateString()}.`);
-        setAccessDeniedAction(null);
-        setIsAccessDeniedOpen(true);
-        return;
+        setAccessDeniedAction(null); setIsAccessDeniedOpen(true); return;
       }
     }
     if (perm === 'purchasable') {
       const price = (f.permConfig as any)?.price || '?';
       setAccessDeniedMsg(`This file requires payment: ${price} sUSD`);
       setAccessDeniedAction({ label: 'Simulate Pay & Preview', fn: () => { setIsAccessDeniedOpen(false); _openPreviewModal(f); } });
-      setIsAccessDeniedOpen(true);
-      return;
+      setIsAccessDeniedOpen(true); return;
     }
 
-    // If we already have a cached previewUrl (just uploaded), use it instantly
-    if (f.previewUrl) {
-      _openPreviewModal(f);
-      return;
+    // Already have a cached ObjectURL from this session → open immediately
+    if (f.previewUrl) { _openPreviewModal(f); return; }
+
+    // Determine the correct image/video type first — only fetch for visual types
+    const IMAGE_EXTS = ['PNG','JPG','JPEG','GIF','SVG','WEBP','BMP','ICO'];
+    const VIDEO_EXTS = ['MP4','WEBM','OGG','MOV'];
+    const extUp = f.ext.toUpperCase();
+    const isVisual = IMAGE_EXTS.includes(extUp) || VIDEO_EXTS.includes(extUp);
+
+    // Open modal immediately; show loading state while we fetch
+    _openPreviewModal(f);
+
+    if (!isVisual) return; // For non-visual files just show metadata
+
+    // Fetch the blob directly from the Shelby RPC REST API
+    // URL format (from SDK source): {baseUrl}/v1/blobs/{account}/{blobName}
+    const shelbyRpc = ACTIVE_NET.shelbyRpc;
+    const addr = walletAddress;
+    if (!shelbyRpc || !addr) return;
+
+    const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+    const blobUrl = `${shelbyRpc}/v1/blobs/${addr}/${encodedName}`;
+    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+    const headers: Record<string, string> = {};
+    if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
+      headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
     }
 
-    // Otherwise download from network for preview
-    showToast(`Loading preview…`, 'info');
     try {
-      const { ShelbyClient, Network } = await import('@shelby-protocol/sdk/browser') as any;
-      const isOnShelbyNet = activeNetKey === 'shelbynet';
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const shelbyClient = isOnShelbyNet && SHELBYNET_KEY
-        ? new ShelbyClient({ network: Network.SHELBYNET, apiKey: SHELBYNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
-
-      const blob: any = await shelbyClient.rpc.getBlob({ account: walletAddress, blobName: f.name });
-      let bytes: Uint8Array;
-      if (blob.data instanceof ReadableStream) {
-        const reader = blob.data.getReader();
-        const chunks: Uint8Array[] = [];
-        while (true) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
-        const total = chunks.reduce((s, c) => s + c.length, 0);
-        bytes = new Uint8Array(total);
-        let offset = 0; for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
-      } else {
-        bytes = blob.data;
+      const res = await fetch(blobUrl, { headers });
+      if (!res.ok) {
+        console.warn(`[Vault] Preview fetch ${res.status} for ${f.name}`);
+        return; // Modal already open, will just show "no preview" fallback
       }
+      const arrayBuf = await res.arrayBuffer();
+      const mimeType = res.headers.get('content-type') || `image/${extUp.toLowerCase()}`;
+      const objectUrl = URL.createObjectURL(new Blob([arrayBuf], { type: mimeType }));
 
-      const objectUrl = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer]));
-      // Cache it on the file object
+      // Cache and update the already-open modal by updating previewUrl on the file
       setFiles(prev => prev.map(fi => fi.id === id ? { ...fi, previewUrl: objectUrl } : fi));
+      // Re-open to pass the new previewUrl
       _openPreviewModal({ ...f, previewUrl: objectUrl });
     } catch (err: any) {
-      console.warn('[Vault] Preview download failed, opening without preview:', err);
-      _openPreviewModal(f); // Still open modal — show metadata even if data missing
+      console.warn('[Vault] Preview fetch error:', err?.message);
+      // Modal already open without previewUrl — graceful fallback already handled
     }
   };
+
 
   const _openPreviewModal = (f: StoredFile) => {
     setSelectedFile(f);
