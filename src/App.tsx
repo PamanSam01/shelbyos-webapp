@@ -934,6 +934,33 @@ function App() {
   }
 
   // ── Download file from Shelby network ─────────────────────────────────────
+  // Helper: try downloading with primary address, fallback to secondary
+  const fetchBlobWithFallback = async (f: StoredFile, ownerAddr: string): Promise<Blob> => {
+    const shelbyRpc = ACTIVE_NET.shelbyRpc;
+    if (!shelbyRpc) throw new Error('Shelby RPC URL not configured.');
+
+    const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+    const headers: Record<string, string> = {};
+    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+    if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
+
+    // Primary: use the exact address the file was uploaded under
+    const primaryAddr = f.uploader || ownerAddr;
+    const primaryUrl = `${shelbyRpc}/v1/blobs/${primaryAddr}/${encodedName}`;
+    let res = await fetch(primaryUrl, { headers });
+
+    if (!res.ok && primaryAddr !== ownerAddr) {
+      // Fallback: try current wallet address
+      const fallbackUrl = `${shelbyRpc}/v1/blobs/${ownerAddr}/${encodedName}`;
+      res = await fetch(fallbackUrl, { headers });
+    }
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText} — blob not found on RPC`);
+    }
+    return res.blob();
+  };
+
   const handleDownloadFile = async (id: number) => {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) { showToast('Cannot download: wallet not connected', 'error'); return; }
@@ -942,24 +969,7 @@ function App() {
     setShowTerminal(true);
     addLog('DWNL', `Downloading ${f.name} from RPC Nodes...`);
     try {
-      const shelbyRpc = ACTIVE_NET.shelbyRpc;
-      if (!shelbyRpc) throw new Error("Shelby RPC URL not configured.");
-
-      const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
-      const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
-      
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const headers: Record<string, string> = {};
-      if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
-        headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
-      }
-
-      const res = await fetch(blobUrl, { headers });
-      if (!res.ok) {
-        throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
-      }
-
-      const blob = await res.blob();
+      const blob = await fetchBlobWithFallback(f, walletAddress);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = f.name; a.click();
@@ -968,8 +978,8 @@ function App() {
       addLog('DONE', `${f.name} downloaded successfully.`);
     } catch (err: any) {
       console.error('[Vault] Download failed:', err);
-      showToast(`Download failed: ${err?.message?.slice(0, 80) || 'unknown error'}`, 'error');
-      addLog('ERR ', `Download failed for ${f.name}.`);
+      showToast(`Download failed: ${err?.message?.slice(0, 100) || 'unknown error'}`, 'error');
+      addLog('ERR ', `Download failed: ${err?.message?.slice(0, 80)}`);
     }
   };
 
@@ -985,20 +995,7 @@ function App() {
     
     for (const f of selectedFiles) {
       try {
-        const shelbyRpc = ACTIVE_NET.shelbyRpc;
-        if (!shelbyRpc) throw new Error("RPC not configured");
-        
-        const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
-        const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
-        
-        const headers: Record<string, string> = {};
-        const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-        if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
-        
-        const res = await fetch(blobUrl, { headers });
-        if (!res.ok) throw new Error(`${res.status}`);
-        
-        const blob = await res.blob();
+        const blob = await fetchBlobWithFallback(f, walletAddress);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = f.name; a.click();
@@ -1008,9 +1005,9 @@ function App() {
         addLog('SYNC', `Streamed ${f.name} from network.`);
         // Delay to prevent browser download blast throttling
         await new Promise(r => setTimeout(r, 600));
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Failed to download ${f.name}`, err);
-        addLog('ERR ', `Stream dropped for ${f.name}.`);
+        addLog('ERR ', `${f.name}: ${err?.message?.slice(0, 60)}`);
       }
     }
     
