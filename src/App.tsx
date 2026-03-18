@@ -90,7 +90,8 @@ function App() {
   
   const [toast, setToast] = useState({ message: '', type: 'info' as ToastType, isVisible: false })
 
-  console.log("activeNetKey:", activeNetKey);
+  // No changes needed here, keeping existing logs if any
+
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
 
   // Data State - Fixed: Initialized as empty, removed dummy data
@@ -118,8 +119,14 @@ function App() {
         if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
         if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
 
+        console.log(`[Vault] Fetching from Indexer: ${ACTIVE_NET.label}`);
+        console.log(`[Vault] activeNetKey: ${activeNetKey}`);
+        console.log(`[Vault] Indexer URL: ${indexerUrl ? 'OK' : 'MISSING'}`);
+        console.log(`[Vault] API Key present: ${apiKey ? 'YES' : 'NO'}`);
+
         if (!indexerUrl || !apiKey) {
-          throw new Error("Missing Indexer URL or API Key (401)");
+          const missingMsg = !indexerUrl ? "Indexer URL" : "API Key";
+          throw new Error(`Missing ${missingMsg} (401). Please check Vercel Env Variables (VITE_SHELBY_API_KEY_${ACTIVE_NET.label.toUpperCase()})`);
         }
 
         const currentMicros = String(Date.now() * 1000);
@@ -154,12 +161,14 @@ function App() {
 
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`${res.status} ${text}`);
+          console.error(`[Vault] GraphQL Indexer HTTP Error: ${res.status} ${text}`);
+          throw new Error(`GraphQL Indexer HTTP Error: ${res.status} ${text}`);
         }
 
         const json = await res.json();
         if (json.errors) {
-          throw new Error(`${json.errors[0]?.message || 'Unknown GraphQL error'}`);
+          console.error(`[Vault] GraphQL Indexer Query Error: ${json.errors[0]?.message}`);
+          throw new Error(`GraphQL Indexer Query Error: ${json.errors[0]?.message || 'Unknown GraphQL error'}`);
         }
 
         const rawBlobs: any[] = json.data?.blobs || [];
