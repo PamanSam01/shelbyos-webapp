@@ -788,6 +788,8 @@ function App() {
 
     try {
       showToast('Waiting for wallet approval to clear vault...', 'info');
+      setShowTerminal(true);
+      addLog('WIPE', `Requesting total vault wipe for ${files.length} files...`);
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
       
       const blobNames = files.map(f => f.name);
@@ -802,10 +804,12 @@ function App() {
       if (!txHash) throw new Error('Transaction hash not found');
 
       showToast('Confirming mass deletion on-chain...', 'info');
+      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
       await aptos.waitForTransaction({ transactionHash: txHash });
 
       setFiles([]);
       showToast('Vault history permanently cleared on-chain ✓', 'success');
+      addLog('DONE', `Vault permanently cleared on-chain.`);
       
       // Give RPC a second to sync
       setTimeout(() => fetchVaultHistory(), 1500);
@@ -909,6 +913,8 @@ function App() {
     if (!f || !walletAddress) { showToast('Cannot download: wallet not connected', 'error'); return; }
 
     showToast(`⬇ Downloading ${f.name}…`, 'info');
+    setShowTerminal(true);
+    addLog('DWNL', `Downloading ${f.name} from RPC Nodes...`);
     try {
       const shelbyRpc = ACTIVE_NET.shelbyRpc;
       if (!shelbyRpc) throw new Error("Shelby RPC URL not configured.");
@@ -933,9 +939,11 @@ function App() {
       a.href = url; a.download = f.name; a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       showToast(`✓ ${f.name} downloaded`, 'success');
+      addLog('DONE', `${f.name} downloaded successfully.`);
     } catch (err: any) {
       console.error('[Vault] Download failed:', err);
       showToast(`Download failed: ${err?.message?.slice(0, 80) || 'unknown error'}`, 'error');
+      addLog('ERR ', `Download failed for ${f.name}.`);
     }
   };
 
@@ -945,6 +953,8 @@ function App() {
     if (selectedFiles.length === 0 || !walletAddress) return;
 
     showToast(`⬇ Downloading ${selectedFiles.length} files...`, 'info');
+    setShowTerminal(true);
+    addLog('DWNL', `Initiating batch download for ${selectedFiles.length} files...`);
     let successCount = 0;
     
     for (const f of selectedFiles) {
@@ -969,14 +979,17 @@ function App() {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
         
         successCount++;
+        addLog('SYNC', `Streamed ${f.name} from network.`);
         // Delay to prevent browser download blast throttling
         await new Promise(r => setTimeout(r, 600));
       } catch (err) {
         console.error(`Failed to download ${f.name}`, err);
+        addLog('ERR ', `Stream dropped for ${f.name}.`);
       }
     }
     
     showToast(`✓ Downloaded ${successCount}/${selectedFiles.length} files`, 'success');
+    addLog('DONE', `Batch download complete: ${successCount}/${selectedFiles.length}`);
     setCheckedIds(new Set());
   };
 
@@ -991,6 +1004,8 @@ function App() {
 
     try {
       showToast('Waiting for wallet approval to delete files...', 'info');
+      setShowTerminal(true);
+      addLog('WIPE', `Requesting batch deletion for ${selectedFiles.length} files...`);
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
       const blobNames = selectedFiles.map(f => f.name);
       const payload = ShelbyBlobClient.createDeleteMultipleBlobsPayload({ blobNames });
@@ -1000,9 +1015,11 @@ function App() {
       if (!txHash) throw new Error('Transaction hash not found');
 
       showToast('Confirming batch deletion on-chain...', 'info');
+      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
       await aptos.waitForTransaction({ transactionHash: txHash });
 
       showToast(`Successfully deleted ${selectedFiles.length} files ✓`, 'success');
+      addLog('DONE', `Batch deletion confirmed on-chain.`);
       setCheckedIds(new Set());
       setTimeout(() => fetchVaultHistory(), 1500);
     } catch (err: any) {
@@ -1109,6 +1126,8 @@ function App() {
 
     showToast(`Waiting for wallet signature to delete "${f.name}"…`, 'info');
     try {
+      setShowTerminal(true);
+      addLog('WIPE', `Requesting permanent deletion for ${f.name}...`);
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
       const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: f.name });
       const txResult = await signAndSubmitTransaction({ data: payload });
@@ -1116,11 +1135,13 @@ function App() {
       if (!txHash) throw new Error('No tx hash returned after delete');
 
       showToast(`Confirming deletion on-chain…`, 'info');
+      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
       await aptos.waitForTransaction({ transactionHash: txHash });
 
       // Remove from local list after confirmed
       setFiles(prev => prev.filter(fi => fi.id !== id));
       showToast(`✓ "${f.name}" deleted from blockchain`, 'success');
+      addLog('DONE', `${f.name} deleted successfully.`);
     } catch (err: any) {
       const msg: string = err?.message || '';
       if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
