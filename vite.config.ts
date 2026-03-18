@@ -14,10 +14,15 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      '@telegram-apps/bridge': '@tma.js/bridge',
+    },
+  },
   optimizeDeps: {
     include: [
       '@wallet-standard/core',
-      '@telegram-apps/bridge',
+      '@tma.js/bridge',
       'buffer',
     ],
   },
