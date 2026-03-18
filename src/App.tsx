@@ -145,6 +145,9 @@ function App() {
       console.log(`[Vault] Found ${allBlobTxs.length} blob transactions via Aptos REST API`);
 
       if (allBlobTxs.length > 0) {
+        // Sort newest first
+        allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
+
         const history: StoredFile[] = allBlobTxs.map((tx: any) => {
           const args: any[] = tx.payload?.arguments ?? [];
 
