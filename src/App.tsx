@@ -186,7 +186,24 @@ function App() {
           };
         });
 
-        setFiles(history);
+// Restore saved permission labels from localStorage
+        const historyWithPerms = history.map(f => {
+          const storageKey = `shelbyos_perm_${addr}/${f.name}`;
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            try {
+              const savedConfig = JSON.parse(saved);
+              return {
+                ...f,
+                permConfig: savedConfig,
+                vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any,
+              };
+            } catch { /* ignore parse errors */ }
+          }
+          return f;
+        });
+
+        setFiles(historyWithPerms);
         return;
       }
 
@@ -445,9 +462,14 @@ function App() {
 
   const handleApplyPermissions = (config: PermissionConfig) => {
     if (editingFileId !== null) {
-      // Modifying an existing file in the vault
+      // Modifying an existing file in the vault — persist to localStorage
       setFiles(prev => prev.map(f => {
         if (f.id === editingFileId) {
+          // Persist permission label under {walletAddress}/{blobName}
+          if (walletAddress && f.name) {
+            const storageKey = `shelbyos_perm_${walletAddress}/${f.name}`;
+            localStorage.setItem(storageKey, JSON.stringify(config));
+          }
           return {
             ...f,
             permConfig: config,
@@ -456,7 +478,7 @@ function App() {
         }
         return f;
       }));
-      showToast('Permissions updated for file ✓', 'success');
+      showToast('Permissions updated ✓ (saved locally)', 'success');
       setEditingFileId(null);
     } else if (editingPermIndex !== null && uploadQueue[editingPermIndex]) {
       const newQueue = [...uploadQueue];
@@ -768,6 +790,179 @@ function App() {
     setIsPreviewModalOpen(true);
   }
 
+  // ── Download file from Shelby network ─────────────────────────────────────
+  const handleDownloadFile = async (id: number) => {
+    const f = files.find(s => s.id === id);
+    if (!f || !walletAddress) { showToast('Cannot download: wallet not connected', 'error'); return; }
+
+    showToast(`⬇ Downloading ${f.name}…`, 'info');
+    try {
+      const { ShelbyClient, Network } = await import('@shelby-protocol/sdk/browser') as any;
+      const isOnShelbyNet = activeNetKey === 'shelbynet';
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const shelbyClient = isOnShelbyNet && SHELBYNET_KEY
+        ? new ShelbyClient({ network: Network.SHELBYNET, apiKey: SHELBYNET_KEY } as any)
+        : new ShelbyClient({ network: Network.TESTNET } as any);
+
+      const blob: any = await shelbyClient.rpc.getBlob({ account: walletAddress, blobName: f.name });
+      // blob.data is a ReadableStream or Uint8Array
+      let bytes: Uint8Array;
+      if (blob.data instanceof ReadableStream) {
+        const reader = blob.data.getReader();
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+        const total = chunks.reduce((s, c) => s + c.length, 0);
+        bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
+      } else {
+        bytes = blob.data;
+      }
+
+      const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer]));
+      const a = document.createElement('a');
+      a.href = url; a.download = f.name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast(`✓ ${f.name} downloaded`, 'success');
+    } catch (err: any) {
+      console.error('[Vault] Download failed:', err);
+      showToast(`Download failed: ${err?.message?.slice(0, 80) || 'unknown error'}`, 'error');
+    }
+  };
+
+  // ── Preview file from Shelby network or cached ObjectURL ──────────────────
+  const handlePreviewFromNetwork = async (id: number) => {
+    const f = files.find(s => s.id === id);
+    if (!f) return;
+
+    // Check permission gate first
+    const perm = (f.permConfig && f.permConfig.type) || f.vis || 'public';
+    if (perm === 'allowlist') {
+      const list = (f.permConfig as any)?.allowlist || [];
+      if (list.length > 0 && !list.includes(walletAddress)) {
+        setAccessDeniedMsg(`Access restricted. Your wallet is not on the allowlist.`);
+        setAccessDeniedAction(null);
+        setIsAccessDeniedOpen(true);
+        return;
+      }
+    }
+    if (perm === 'timelock') {
+      const unlock = new Date((f.permConfig as any)?.timelock || 0);
+      if (Date.now() < unlock.getTime()) {
+        setAccessDeniedMsg(`File unlocks on ${unlock.toLocaleDateString()}.`);
+        setAccessDeniedAction(null);
+        setIsAccessDeniedOpen(true);
+        return;
+      }
+    }
+    if (perm === 'purchasable') {
+      const price = (f.permConfig as any)?.price || '?';
+      setAccessDeniedMsg(`This file requires payment: ${price} sUSD`);
+      setAccessDeniedAction({ label: 'Simulate Pay & Preview', fn: () => { setIsAccessDeniedOpen(false); _openPreviewModal(f); } });
+      setIsAccessDeniedOpen(true);
+      return;
+    }
+
+    // If we already have a cached previewUrl (just uploaded), use it instantly
+    if (f.previewUrl) {
+      _openPreviewModal(f);
+      return;
+    }
+
+    // Otherwise download from network for preview
+    showToast(`Loading preview…`, 'info');
+    try {
+      const { ShelbyClient, Network } = await import('@shelby-protocol/sdk/browser') as any;
+      const isOnShelbyNet = activeNetKey === 'shelbynet';
+      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      const shelbyClient = isOnShelbyNet && SHELBYNET_KEY
+        ? new ShelbyClient({ network: Network.SHELBYNET, apiKey: SHELBYNET_KEY } as any)
+        : new ShelbyClient({ network: Network.TESTNET } as any);
+
+      const blob: any = await shelbyClient.rpc.getBlob({ account: walletAddress, blobName: f.name });
+      let bytes: Uint8Array;
+      if (blob.data instanceof ReadableStream) {
+        const reader = blob.data.getReader();
+        const chunks: Uint8Array[] = [];
+        while (true) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); }
+        const total = chunks.reduce((s, c) => s + c.length, 0);
+        bytes = new Uint8Array(total);
+        let offset = 0; for (const c of chunks) { bytes.set(c, offset); offset += c.length; }
+      } else {
+        bytes = blob.data;
+      }
+
+      const objectUrl = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer]));
+      // Cache it on the file object
+      setFiles(prev => prev.map(fi => fi.id === id ? { ...fi, previewUrl: objectUrl } : fi));
+      _openPreviewModal({ ...f, previewUrl: objectUrl });
+    } catch (err: any) {
+      console.warn('[Vault] Preview download failed, opening without preview:', err);
+      _openPreviewModal(f); // Still open modal — show metadata even if data missing
+    }
+  };
+
+  const _openPreviewModal = (f: StoredFile) => {
+    setSelectedFile(f);
+    setIsPreviewModalOpen(true);
+  };
+
+  // ── Delete blob on-chain ───────────────────────────────────────────────────
+  const handleDeleteFile = async (id: number) => {
+    const f = files.find(s => s.id === id);
+    if (!f || !walletAddress || !signAndSubmitTransaction) {
+      showToast('Cannot delete: wallet not connected', 'error');
+      return;
+    }
+
+    if (!window.confirm(`Delete "${f.name}" from the Shelby blockchain?\n\nThis will submit an on-chain transaction and cannot be undone.`)) return;
+
+    showToast(`Waiting for wallet signature to delete "${f.name}"…`, 'info');
+    try {
+      const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
+      const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: f.name });
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error('No tx hash returned after delete');
+
+      showToast(`Confirming deletion on-chain…`, 'info');
+      await aptos.waitForTransaction({ transactionHash: txHash });
+
+      // Remove from local list after confirmed
+      setFiles(prev => prev.filter(fi => fi.id !== id));
+      showToast(`✓ "${f.name}" deleted from blockchain`, 'success');
+    } catch (err: any) {
+      const msg: string = err?.message || '';
+      if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
+        showToast('Delete cancelled', 'info');
+      } else {
+        showToast(`Delete failed: ${msg.slice(0, 80)}`, 'error');
+      }
+    }
+  };
+
+  // ── Open in Explorer ───────────────────────────────────────────────────────
+  const handleOpenExplorer = (id: number) => {
+    const f = files.find(s => s.id === id);
+    if (!f || !walletAddress) return;
+    const explorerBase = 'https://explorer.shelby.xyz/testnet/account';
+    const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
+    window.open(url, '_blank', 'noopener');
+  };
+
+  // ── Copy explorer link ─────────────────────────────────────────────────────
+  const handleCopyLink = (id: number) => {
+    const f = files.find(s => s.id === id);
+    if (!f || !walletAddress) return;
+    const explorerBase = 'https://explorer.shelby.xyz/testnet/account';
+    const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
+    navigator.clipboard.writeText(url).then(() => showToast('Explorer link copied ✓', 'success'));
+  };
+
   const handleRefreshBalances = async () => {
     if (!ACTIVE_NET?.aptosRpc) return;
     await fetchBalances();
@@ -837,15 +1032,17 @@ function App() {
           }}
         />
         <div className="layout">
-          <VaultTable 
-            files={files} 
+          <VaultTable
+            files={files}
             isLoading={isHistoryLoading}
             error={historyError}
             walletConnected={walletConnected}
             onConnectWallet={() => setIsWalletModalOpen(true)}
-            onCopyLink={handleShowDetails}
-            onPreview={handlePreviewFile}
-            onDelete={(id) => setFiles(prev => prev.filter(f => f.id !== id))}
+            onPreview={handlePreviewFromNetwork}
+            onDownload={handleDownloadFile}
+            onOpenExplorer={handleOpenExplorer}
+            onCopyLink={handleCopyLink}
+            onDelete={handleDeleteFile}
             onManagePermission={(id) => {
               const file = files.find(f => f.id === id);
               if (file) {
