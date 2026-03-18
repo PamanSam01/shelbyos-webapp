@@ -1,8 +1,8 @@
 /**
- * indexer.ts \u2014 Aptos GraphQL Indexer integration for Shelby OS Vault History
+ * indexer.ts — Aptos GraphQL Indexer integration for Shelby OS Vault History
  *
- * Queries the on-chain RegisterBlob transactions directly from the Aptos GraphQL
- * Indexer, bypassing the Shelby REST API when it is unavailable.
+ * Queries the on-chain user_transactions from the Aptos GraphQL Indexer,
+ * filtering for RegisterBlob contract calls belonging to the connected wallet.
  */
 
 export interface IndexerBlob {
@@ -20,10 +20,9 @@ export interface IndexerBlob {
   txHash: string;
 }
 
-const REGISTER_BLOB_FUNC = 'register_blob';
-
 /**
  * Fetch blob history for a wallet address from the Aptos GraphQL Indexer.
+ * Uses `user_transactions` (the correct Aptos Indexer root field).
  * Returns an array of IndexerBlob or throws on failure.
  */
 export async function fetchBlobsFromIndexer(
@@ -33,43 +32,41 @@ export async function fetchBlobsFromIndexer(
   networkLabel: string,
   limit = 50
 ): Promise<IndexerBlob[]> {
-  // Targets RegisterBlob entry function transactions
-  const querySimple = `
-    query BlobTxns($addr: String!, $contract: String!, $limit: Int!) {
-      transactions(
+  // Correct Aptos Indexer GraphQL schema — use user_transactions root field
+  const query = `
+    query ShelbyBlobHistory($addr: String!, $func: String!, $limit: Int!) {
+      user_transactions(
         where: {
-          _and: [
-            { user_transactions: { sender: { _eq: $addr } } }
-            { user_transactions: { entry_function_id_str: { _ilike: $contract } } }
-          ]
+          sender: { _eq: $addr }
+          entry_function_id_str: { _ilike: $func }
         }
-        order_by: { version: desc }
+        order_by: { timestamp: desc }
         limit: $limit
       ) {
         version
         hash
-        user_transactions {
-          entry_function_id_str
-          sender
-          timestamp
-          arguments
-        }
+        timestamp
+        entry_function_id_str
+        sender
+        arguments
       }
     }
   `;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  const funcPattern = `%${contract}%register_blob%`;
 
   try {
     const res = await fetch(indexerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: querySimple,
+        query,
         variables: {
           addr: walletAddress.toLowerCase(),
-          contract: `%${contract}%::${REGISTER_BLOB_FUNC}%`,
+          func: funcPattern,
           limit,
         },
       }),
@@ -79,30 +76,36 @@ export async function fetchBlobsFromIndexer(
     clearTimeout(timeout);
 
     if (!res.ok) {
-      throw new Error(`Indexer HTTP ${res.status}`);
+      throw new Error(`Indexer HTTP ${res.status}: ${res.statusText}`);
     }
 
     const json = await res.json();
-    const txns: any[] = json?.data?.transactions ?? [];
+
+    // Surface any GraphQL errors
+    if (json.errors && json.errors.length > 0) {
+      console.warn('[Indexer] GraphQL errors:', json.errors);
+      throw new Error(json.errors[0]?.message || 'GraphQL error');
+    }
+
+    const txns: any[] = json?.data?.user_transactions ?? [];
+    console.log(`[Indexer] GraphQL returned ${txns.length} user_transactions`);
 
     return txns
       .map((tx: any): IndexerBlob | null => {
-        const userTx = tx?.user_transactions?.[0];
-        if (!userTx) return null;
-
-        const args: string[] = userTx.arguments ?? [];
+        const args: string[] = tx.arguments ?? [];
         let name = 'Vault Asset';
         let size = 0;
 
-        // Argument 0 is often the blob name (hex or plain string)
+        // Argument 0 is the blob name (hex-encoded or plain)
         if (args.length > 0) {
           const rawName = args[0];
           if (typeof rawName === 'string' && rawName.startsWith('0x')) {
             try {
               const hex = rawName.slice(2);
-              name = new TextDecoder().decode(
+              const decoded = new TextDecoder().decode(
                 new Uint8Array((hex.match(/.{1,2}/g) ?? []).map((b) => parseInt(b, 16)))
               );
+              if (decoded && decoded.trim().length > 0) name = decoded.trim();
             } catch {
               name = rawName;
             }
@@ -110,34 +113,38 @@ export async function fetchBlobsFromIndexer(
             name = rawName;
           }
         }
+
+        // Argument 3 is usually size in bytes
         if (args.length >= 4) {
           size = parseInt(args[3]) || 0;
         }
 
-        const ts = parseInt(userTx.timestamp) || Date.now() * 1000;
-        const d = new Date(ts / 1000);
+        // Timestamp from indexer is in microseconds
+        const tsMicro = parseInt(tx.timestamp);
+        const tsMs = isNaN(tsMicro) ? Date.now() : tsMicro / 1000;
+        const d = new Date(tsMs);
         const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
 
         return {
-          id: tx.version,
+          id: parseInt(tx.version) || Date.now(),
           name,
           ext,
           size,
           date: d.toISOString().split('T')[0],
           time: d.toTimeString().slice(0, 5),
-          uploader: userTx.sender || walletAddress,
+          uploader: tx.sender || walletAddress,
           status: 'stored',
           vis: 'public',
           network: networkLabel,
           cid: name,
-          txHash: tx.hash,
+          txHash: tx.hash || '',
         };
       })
       .filter((b): b is IndexerBlob => b !== null);
   } catch (err: any) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      throw new Error('Indexer request timed out');
+      throw new Error('Indexer request timed out after 10s');
     }
     throw err;
   }

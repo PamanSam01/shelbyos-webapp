@@ -206,7 +206,7 @@ function App() {
 
       if (res && res.ok) {
         const blobs = await res.json().catch(() => []);
-        if (Array.isArray(blobs)) {
+        if (Array.isArray(blobs) && blobs.length > 0) {
           console.log(`[Vault] Received ${blobs.length} blobs from REST RPC`);
           const history = blobs.map((blob: any) => {
             const name = blob.blobName || blob.name || "unknown";
@@ -230,7 +230,9 @@ function App() {
             };
           });
           setFiles(history);
-          return;
+          return; // Only early-exit when we actually have data
+        } else {
+          console.log('[Vault] REST API returned empty list, trying on-chain fallbacks...');
         }
       }
 
