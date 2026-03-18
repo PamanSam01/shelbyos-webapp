@@ -750,9 +750,53 @@ function App() {
     }, 2500);
   }
 
-  const handleClearVault = () => {
-    setFiles([])
-    showToast('Vault history cleared', 'info')
+  const handleClearVault = async () => {
+    if (files.length === 0) {
+      showToast('Vault is already empty', 'info');
+      return;
+    }
+    
+    if (!walletAddress || !signAndSubmitTransaction) {
+      showToast('⚠ Connect a wallet to clear history on-chain', 'error');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to permanently delete ALL ${files.length} files from the Shelby blockchain?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      showToast('Waiting for wallet approval to clear vault...', 'info');
+      const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
+      
+      const blobNames = files.map(f => f.name);
+      
+      const payload = ShelbyBlobClient.createDeleteMultipleBlobsPayload({
+        blobNames
+      });
+
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      
+      if (!txHash) throw new Error('Transaction hash not found');
+
+      showToast('Confirming mass deletion on-chain...', 'info');
+      await aptos.waitForTransaction({ transactionHash: txHash });
+
+      setFiles([]);
+      showToast('Vault history permanently cleared on-chain ✓', 'success');
+      
+      // Give RPC a second to sync
+      setTimeout(() => fetchVaultHistory(), 1500);
+
+    } catch (err: any) {
+      const msg = err?.message || 'failed';
+      if (msg.includes('cancel') || msg.includes('rejected') || msg.includes('User denied')) {
+        showToast('Clear vault cancelled', 'info');
+      } else {
+        showToast(`Failed to clear vault: ${msg.slice(0,80)}`, 'error');
+      }
+    }
   }
 
   const handleShowDetails = (id: number) => {
