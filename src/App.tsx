@@ -23,7 +23,6 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
-import DashboardOverview from './components/DashboardOverview'
 
 const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 if (!API_KEY) {
@@ -101,7 +100,8 @@ function App() {
   // Data State - Fixed: Initialized as empty, removed dummy data
   const [files, setFiles] = useState<StoredFile[]>([])
 
-  // Helper: Fetch true vault history from the blockchain state using Shelby SDK
+  // Helper: Fetch vault history via direct GraphQL to the Shelby public indexer
+  // This mirrors exactly what the Shelby Explorer does, so history is always in sync.
   const fetchVaultHistory = useCallback(async () => {
     if (!walletAddress || !ACTIVE_NET) {
       return;
@@ -111,51 +111,74 @@ function App() {
     setHistoryError(null);
 
     try {
-      const { ShelbyClient } = await import('@shelby-protocol/sdk/browser') as any;
-      const { Network } = await import('@aptos-labs/ts-sdk');
-      const rawShelbyNetKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const rawTestnetKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+      const indexerUrl = ACTIVE_NET.shelbyIndexer;
+      const nowMicros = Date.now() * 1000;
       
-      const getRandomKey = (str?: string) => {
-        if (!str) return undefined;
-        const keys = str.split(',').map(k => k.trim()).filter(Boolean);
-        return keys.length > 0 ? keys[Math.floor(Math.random() * keys.length)] : undefined;
+      const query = `
+        query getBlobs($where: blobs_bool_exp, $orderBy: [blobs_order_by!], $limit: Int, $offset: Int) {
+          blobs(where: $where, order_by: $orderBy, limit: $limit, offset: $offset) {
+            owner
+            blob_commitment
+            blob_name
+            created_at
+            expires_at
+            num_chunksets
+            is_deleted
+            is_written
+            placement_group
+            size
+            updated_at
+            slice_address
+          }
+        }
+      `;
+
+      const variables = {
+        where: {
+          expires_at: { _gte: String(nowMicros) },
+          is_deleted: { _eq: "0" },
+          owner: { _eq: walletAddress.toLowerCase() },
+        },
+        orderBy: [{ created_at: "desc" }],
+        limit: 100,
+        offset: 0,
       };
 
-      const SHELBYNET_KEY = getRandomKey(rawShelbyNetKey);
-      const TESTNET_KEY   = getRandomKey(rawTestnetKey);
-      
-      const isOnShelbyNet = activeNetKey === "shelbynet";
-
-      const apiKeyToUse = isOnShelbyNet ? SHELBYNET_KEY : (TESTNET_KEY || SHELBYNET_KEY);
-      
-      const shelbyClient = new ShelbyClient({
-        network: isOnShelbyNet ? Network.SHELBYNET : Network.TESTNET,
-        apiKey: apiKeyToUse,
-        aptos: { fullnode: ACTIVE_NET.aptosRpc },
-        rpc: { baseUrl: ACTIVE_NET.shelbyRpc },
-        indexer: { baseUrl: ACTIVE_NET.shelbyIndexer },
-      } as any);
-
-      // Fetch the verified on-chain state of blobs for this account
-      const accountBlobs = await shelbyClient.coordination.getAccountBlobs({
-        account: walletAddress,
+      const res = await fetch(indexerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables }),
       });
 
-      // Filter out deleted blobs just in case the SDK indexer didn't
-      const activeBlobs = accountBlobs.filter((b: any) => !b.isDeleted);
-      console.log(`[Vault] Shelby SDK retrieved ${activeBlobs.length} true on-chain blobs for ${walletAddress}`);
+      if (!res.ok) {
+        throw new Error(`GraphQL HTTP ${res.status}: ${res.statusText}`);
+      }
 
-      const history: StoredFile[] = activeBlobs.map((blob: any) => {
-        const d = new Date(blob.creationMicros / 1000);
-        const name = blob.blobNameSuffix || 'Vault Asset';
+      const json = await res.json();
+
+      if (json.errors && json.errors.length > 0) {
+        throw new Error(json.errors[0]?.message || 'GraphQL error');
+      }
+
+      const blobs: any[] = json?.data?.blobs ?? [];
+      console.log(`[Vault] Shelby Indexer returned ${blobs.length} active blobs for ${walletAddress}`);
+
+      const history: StoredFile[] = blobs.map((blob: any) => {
+        // blob_name format is e.g. "@address/filename.txt" - extract suffix after "/"
+        const fullName: string = blob.blob_name || '';
+        const nameSuffix = fullName.includes('/') ? fullName.split('/').slice(1).join('/') : fullName;
+        const name = nameSuffix || 'Vault Asset';
         const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-        
+
+        // created_at is in microseconds (from the indexer)
+        const tsMicro = parseInt(blob.created_at) || 0;
+        const d = new Date(tsMicro / 1000);
+
         return {
-          id: blob.creationMicros || Date.now() + Math.random(), // Unique ID
+          id: tsMicro || Date.now() + Math.random(),
           name,
           ext,
-          size: blob.size || 0,
+          size: parseInt(blob.size) || 0,
           date: d.toISOString().split('T')[0],
           time: d.toTimeString().slice(0, 5),
           uploader: blob.owner || walletAddress,
@@ -164,7 +187,7 @@ function App() {
           permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
           network: ACTIVE_NET.label,
           cid: name,
-          txHash: '', // SDK doesn't return txHash directly in BlobMetadata
+          txHash: '',
         };
       });
 
@@ -187,8 +210,8 @@ function App() {
 
       setFiles(historyWithPerms);
     } catch (err: any) {
-      console.warn('[Vault] Error fetching true vault state:', err?.message);
-      setHistoryError(err?.message || 'Failed to sync history from blockchain state');
+      console.warn('[Vault] Error fetching history from Shelby Indexer:', err?.message);
+      setHistoryError(err?.message || 'Failed to sync history');
     } finally {
       setIsHistoryLoading(false);
     }
@@ -1122,7 +1145,6 @@ function App() {
           }}
         />
         <div className="layout">
-          {walletConnected && <DashboardOverview files={files} />}
           <VaultTable
             files={files}
             checkedIds={checkedIds}
