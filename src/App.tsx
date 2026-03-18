@@ -130,7 +130,11 @@ function App() {
         const relevantTxs = txns.filter((tx: any) => {
           if (tx.type !== 'user_transaction') return false;
           const fn: string = tx.payload?.function ?? '';
-          return fn.includes('register_blob') || fn.includes('::storage::') || fn.includes('delete_blob') || fn.includes('delete_multiple_blobs');
+          return fn.includes('register_blob') || 
+                 fn.includes('register_multiple_blobs') || 
+                 fn.includes('::storage::') || 
+                 fn.includes('delete_blob') || 
+                 fn.includes('delete_multiple_blobs');
         });
         allBlobTxs.push(...relevantTxs);
 
