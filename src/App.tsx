@@ -36,6 +36,7 @@ function App() {
   // Theme & Network
   const [theme, setTheme] = useState('theme-xp')
   const [activeNetKey, setActiveNetKey] = useState<keyof typeof NETWORKS>('testnet')
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
@@ -938,6 +939,82 @@ function App() {
     }
   };
 
+  // ── Download selected files ────────────────────────────────────────────────
+  const handleDownloadSelected = async () => {
+    const selectedFiles = files.filter(f => checkedIds.has(f.id));
+    if (selectedFiles.length === 0 || !walletAddress) return;
+
+    showToast(`⬇ Downloading ${selectedFiles.length} files...`, 'info');
+    let successCount = 0;
+    
+    for (const f of selectedFiles) {
+      try {
+        const shelbyRpc = ACTIVE_NET.shelbyRpc;
+        if (!shelbyRpc) throw new Error("RPC not configured");
+        
+        const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
+        const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
+        
+        const headers: Record<string, string> = {};
+        const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+        if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
+        
+        const res = await fetch(blobUrl, { headers });
+        if (!res.ok) throw new Error(`${res.status}`);
+        
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = f.name; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        
+        successCount++;
+        // Delay to prevent browser download blast throttling
+        await new Promise(r => setTimeout(r, 600));
+      } catch (err) {
+        console.error(`Failed to download ${f.name}`, err);
+      }
+    }
+    
+    showToast(`✓ Downloaded ${successCount}/${selectedFiles.length} files`, 'success');
+    setCheckedIds(new Set());
+  };
+
+  // ── Delete selected files ──────────────────────────────────────────────────
+  const handleDeleteSelected = async () => {
+    const selectedFiles = files.filter(f => checkedIds.has(f.id));
+    if (selectedFiles.length === 0 || !walletAddress) return;
+
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedFiles.length} selected files from the Shelby blockchain?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      showToast('Waiting for wallet approval to delete files...', 'info');
+      const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
+      const blobNames = selectedFiles.map(f => f.name);
+      const payload = ShelbyBlobClient.createDeleteMultipleBlobsPayload({ blobNames });
+
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error('Transaction hash not found');
+
+      showToast('Confirming batch deletion on-chain...', 'info');
+      await aptos.waitForTransaction({ transactionHash: txHash });
+
+      showToast(`Successfully deleted ${selectedFiles.length} files ✓`, 'success');
+      setCheckedIds(new Set());
+      setTimeout(() => fetchVaultHistory(), 1500);
+    } catch (err: any) {
+      const msg = err?.message || 'failed';
+      if (!msg.includes('cancel') && !msg.includes('rejected') && !msg.includes('User denied')) {
+        showToast(`Failed to delete files: ${msg.slice(0,80)}`, 'error');
+      } else {
+        showToast('Batch delete cancelled', 'info');
+      }
+    }
+  };
+
   // ── Preview file from Shelby network or cached ObjectURL ──────────────────
   const handlePreviewFromNetwork = async (id: number) => {
     const f = files.find(s => s.id === id);
@@ -1143,6 +1220,8 @@ function App() {
         <div className="layout">
           <VaultTable
             files={files}
+            checkedIds={checkedIds}
+            onCheckedIdsChange={setCheckedIds}
             isLoading={isHistoryLoading}
             error={historyError}
             walletConnected={walletConnected}
@@ -1193,6 +1272,25 @@ function App() {
                 >
                   🗑️ Clear History
                 </button>
+                {checkedIds.size > 0 && (
+                  <>
+                    <hr style={{ margin: '2px 0', borderTop: '1px solid var(--border-light)', borderBottom: '1px solid var(--border-dark)' }} />
+                    <button 
+                      className="btn95" 
+                      style={{ width: '100%', fontSize: '12px', fontWeight: 'bold' }}
+                      onClick={handleDownloadSelected}
+                    >
+                      ⬇️ Download ({checkedIds.size})
+                    </button>
+                    <button 
+                      className="btn95 del" 
+                      style={{ width: '100%', fontSize: '12px', fontWeight: 'bold', color: 'var(--hot)' }}
+                      onClick={handleDeleteSelected}
+                    >
+                      ❌ Delete ({checkedIds.size})
+                    </button>
+                  </>
+                )}
                 <button 
                   className="btn95" 
                   style={{ width: '100%', fontSize: '12px' }}

@@ -32,6 +32,8 @@ interface VaultTableProps {
   error?: string | null;
   walletConnected?: boolean;
   onConnectWallet?: () => void;
+  checkedIds: Set<number>;
+  onCheckedIdsChange: (ids: Set<number>) => void;
 }
 
 const PAGE_SIZE = 10;
@@ -48,10 +50,11 @@ const VaultTable: React.FC<VaultTableProps> = ({
   error,
   walletConnected,
   onConnectWallet,
+  checkedIds,
+  onCheckedIdsChange,
 }) => {
   const [searchQuery, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
 
   const fmtSize = (b: number) => {
@@ -94,7 +97,7 @@ const VaultTable: React.FC<VaultTableProps> = ({
     const newChecked = new Set(checkedIds);
     if (newChecked.has(id)) newChecked.delete(id);
     else newChecked.add(id);
-    setCheckedIds(newChecked);
+    onCheckedIdsChange(newChecked);
   };
 
   return (
