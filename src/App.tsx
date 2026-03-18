@@ -512,6 +512,24 @@ function App() {
     }
   }
 
+  // ── Unified signing helper (Petra, Google Keyless, Martian) ────────────────
+  // Martian uses its own native API; all other wallets use the adapter's hook.
+  const signAndSubmit = async (payload: any): Promise<string> => {
+    if (manualWalletId === 'Martian') {
+      const martian = (window as any).martian;
+      if (!martian) throw new Error('Martian wallet not found');
+      const txResult = await martian.generateSignAndSubmitTransaction(walletAddress, payload);
+      // Martian returns the hash directly as a string
+      const txHash = typeof txResult === 'string' ? txResult : txResult?.hash || txResult?.result?.hash;
+      if (!txHash) throw new Error('Martian: transaction hash not returned');
+      return txHash;
+    } else {
+      if (!signAndSubmitTransaction) throw new Error('Wallet adapter not connected');
+      const txHash = await signAndSubmit(payload);
+      return txHash;
+    }
+  };
+
   const handleApplyPermissions = (config: PermissionConfig) => {
     if (editingFileId !== null) {
       // Modifying an existing file in the vault — persist to localStorage
@@ -645,9 +663,7 @@ function App() {
         encoding: 0
       });
 
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error("Transaction hash not found after submission");
+      const txHash = await signAndSubmit(payload);
 
       showToast("Confirming on-chain registration...", "info");
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -798,10 +814,8 @@ function App() {
         blobNames
       });
 
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      const txHash = await signAndSubmit(payload);
       
-      if (!txHash) throw new Error('Transaction hash not found');
 
       showToast('Confirming mass deletion on-chain...', 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -1010,9 +1024,7 @@ function App() {
       const blobNames = selectedFiles.map(f => f.name);
       const payload = ShelbyBlobClient.createDeleteMultipleBlobsPayload({ blobNames });
 
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error('Transaction hash not found');
+      const txHash = await signAndSubmit(payload);
 
       showToast('Confirming batch deletion on-chain...', 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -1130,9 +1142,7 @@ function App() {
       addLog('WIPE', `Requesting permanent deletion for ${f.name}...`);
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
       const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: f.name });
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error('No tx hash returned after delete');
+      const txHash = await signAndSubmit(payload);
 
       showToast(`Confirming deletion on-chain…`, 'info');
       addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
@@ -1467,4 +1477,5 @@ function App() {
 
 export default App
 // submitTransaction removed: now using signAndSubmitTransaction directly for adapter wallets
+
 
