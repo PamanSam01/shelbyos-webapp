@@ -535,7 +535,9 @@ function App() {
       return txHash;
     } else {
       if (!signAndSubmitTransaction) throw new Error('Wallet adapter not connected');
-      const txHash = await signAndSubmit(payload);
+      const txResult = await signAndSubmitTransaction({ data: payload });
+      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
+      if (!txHash) throw new Error('Transaction hash not found');
       return txHash;
     }
   };
