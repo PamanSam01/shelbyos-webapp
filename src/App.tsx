@@ -110,50 +110,84 @@ function App() {
       const rawHex = addr.startsWith('0x') ? addr.slice(2) : addr;
       addr = '0x' + rawHex.padStart(64, '0');
 
-      // 1. Try GraphQL Indexer First (Source of Truth, naturally skips deleted files)
+      // 1. Try GraphQL Indexer First (Source of Truth, naturally skips deleted/expired/unwritten files)
       try {
-        const { ShelbyClient } = await import("@shelby-protocol/sdk/browser");
-        const { Network } = await import("@aptos-labs/ts-sdk");
-        const isOnShelbyNet = activeNetKey === 'shelbynet';
-        const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-        const TESTNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_TESTNET;
+        const indexerUrl = ACTIVE_NET.shelbyIndexer;
+        let apiKey = '';
+        if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
+        if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
 
-        const shelbyClient = isOnShelbyNet
-          ? new ShelbyClient({
-              network: Network.SHELBYNET,
-              apiKey: SHELBYNET_KEY,
-              fullnode: ACTIVE_NET.aptosRpc,
-              shelbynode: ACTIVE_NET.shelbyRpc,
-            } as any)
-          : new ShelbyClient({ 
-              network: Network.TESTNET, 
-              apiKey: TESTNET_KEY,
-              fullnode: ACTIVE_NET.aptosRpc,
-              shelbynode: ACTIVE_NET.shelbyRpc,
-            } as any);
+        if (!indexerUrl || !apiKey) {
+          throw new Error("Missing Indexer URL or API Key (401)");
+        }
 
-        const accountBlobs = await shelbyClient.coordination.getAccountBlobs({ account: walletAddress as any });
-        
-        if (accountBlobs && Array.isArray(accountBlobs)) {
+        const currentMicros = String(Date.now() * 1000);
+        const query = `
+          query getBlobs($where: blobs_bool_exp) {
+            blobs(where: $where) {
+              blob_name
+              file_name
+              file_size
+              expires_at
+              is_deleted
+              is_written
+              tx_version
+            }
+          }
+        `;
+        const variables = {
+          where: {
+            owner: { _eq: addr },
+            is_deleted: { _eq: "0" },
+            expires_at: { _gte: currentMicros }
+          }
+        };
+
+        const res = await fetch(indexerUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({ query, variables })
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`${res.status} ${text}`);
+        }
+
+        const json = await res.json();
+        if (json.errors) {
+          throw new Error(`${json.errors[0]?.message || 'Unknown GraphQL error'}`);
+        }
+
+        const rawBlobs: any[] = json.data?.blobs || [];
+        const accountBlobs = rawBlobs.filter((b: any) =>
+          Number(b.is_written) === 1 && Number(b.is_deleted) === 0
+        );
+
+        if (Array.isArray(accountBlobs)) {
           console.log(`[Vault] Found ${accountBlobs.length} active blobs via GraphQL Indexer`);
-          
+
           const history: StoredFile[] = accountBlobs.map((blob: any) => {
-            const d = new Date(blob.creationMicros / 1000);
-            const ext = blob.name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+            const blobName: string = blob.blob_name || blob.file_name || 'Unknown';
+            const txVersion = parseInt(blob.tx_version) || 0;
+            const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
             return {
-              id: blob.creationMicros,
-              name: blob.name,
+              id: txVersion,
+              name: blobName,
               ext,
-              size: blob.size,
-              date: d.toISOString().split('T')[0],
-              time: d.toTimeString().slice(0, 5),
+              size: parseInt(blob.file_size) || 0,
+              date: new Date().toISOString().split('T')[0],
+              time: '',
               uploader: addr,
               status: 'stored' as const,
               vis: 'public' as any,
               permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
               network: ACTIVE_NET.label,
-              cid: blob.name,
-              txHash: '', // Indexer doesn't provide it here easily
+              cid: blobName,
+              txHash: '',
             };
           });
 
