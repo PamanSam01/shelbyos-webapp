@@ -857,88 +857,7 @@ function App() {
     }
   }
 
-  const handleShowDetails = (id: number) => {
-    const file = files.find(f => f.id === id);
-    if (file) {
-      setSelectedFile(file);
-      setIsDetailModalOpen(true);
-    }
-  }
 
-  const handlePreviewFile = (id: number) => {
-    const f = files.find(s => s.id === id);
-    if (!f) return;
-
-    const perm = (f.permConfig && f.permConfig.type) || f.vis || 'public';
-
-    if (perm === 'public') {
-      setSelectedFile(f);
-      setIsPreviewModalOpen(true);
-      return;
-    }
-
-    if (perm === 'allowlist') {
-      if (!walletConnected) {
-        setAccessDeniedMsg('Connect your wallet to access this file.');
-        setAccessDeniedAction(null);
-        setIsAccessDeniedOpen(true);
-        return;
-      }
-      const config = f.permConfig as any;
-      const list = config?.allowlist || [];
-      if (list.includes(walletAddress) || list.length === 0) {
-        setSelectedFile(f);
-        setIsPreviewModalOpen(true);
-      } else {
-        setAccessDeniedMsg(`Access restricted. Your wallet (${walletAddress?.slice(0, 6)}...${walletAddress?.slice(-4)}) is not on the allowlist for this file.`);
-        setAccessDeniedAction(null);
-        setIsAccessDeniedOpen(true);
-      }
-      return;
-    }
-
-    if (perm === 'timelock') {
-      const config = f.permConfig as any;
-      const unlock = config?.timelock;
-      if (!unlock) {
-        setSelectedFile(f);
-        setIsPreviewModalOpen(true);
-        return;
-      }
-      const unlockDate = new Date(unlock);
-      if (Date.now() >= unlockDate.getTime()) {
-        setSelectedFile(f);
-        setIsPreviewModalOpen(true);
-      } else {
-        const fmt = unlockDate.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' })
-                  + ' at ' + unlockDate.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-        setAccessDeniedMsg(`File will be available after ${fmt}.`);
-        setAccessDeniedAction(null);
-        setIsAccessDeniedOpen(true);
-      }
-      return;
-    }
-
-    if (perm === 'purchasable') {
-      const config = f.permConfig as any;
-      const price = config?.price ? config.price + ' sUSD' : 'a fee';
-      setAccessDeniedMsg(`This file requires payment to access.\n\nPrice: ${price}\n\nSimulate payment?`);
-      setAccessDeniedAction({
-        label: 'Pay & Preview',
-        fn: () => {
-          setIsAccessDeniedOpen(false);
-          setSelectedFile(f);
-          setIsPreviewModalOpen(true);
-          showToast('Payment simulated ✓', 'success');
-        }
-      });
-      setIsAccessDeniedOpen(true);
-      return;
-    }
-
-    setSelectedFile(f);
-    setIsPreviewModalOpen(true);
-  }
 
   // ── Download file from Shelby network ─────────────────────────────────────
   // Helper: try downloading with primary address, fallback to secondary
@@ -1105,11 +1024,12 @@ function App() {
     // Fetch the blob directly from the Shelby RPC REST API
     // URL format (from SDK source): {baseUrl}/v1/blobs/{account}/{blobName}
     const shelbyRpc = ACTIVE_NET.shelbyRpc;
-    const addr = walletAddress;
-    if (!shelbyRpc || !addr) return;
+    if (!shelbyRpc || !walletAddress) return;
 
     const encodedName = encodeURIComponent(f.name).replace(/%2F/g, '/');
-    const blobUrl = `${shelbyRpc}/v1/blobs/${addr}/${encodedName}`;
+    const primaryAddr = f.uploader || walletAddress;
+    const blobUrl = `${shelbyRpc}/v1/blobs/${primaryAddr}/${encodedName}`;
+
     const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
     const headers: Record<string, string> = {};
     if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
@@ -1117,7 +1037,13 @@ function App() {
     }
 
     try {
-      const res = await fetch(blobUrl, { headers });
+      let res = await fetch(blobUrl, { headers });
+      if (!res.ok && primaryAddr !== walletAddress) {
+        // Fallback to current address
+        const fallbackUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
+        res = await fetch(fallbackUrl, { headers });
+      }
+
       if (!res.ok) {
         console.warn(`[Vault] Preview fetch ${res.status} for ${f.name}`);
         return; // Modal already open, will just show "no preview" fallback
