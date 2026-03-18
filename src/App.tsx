@@ -618,7 +618,7 @@ function App() {
       addLog('AUTH', `Awaiting single wallet signature for ${total} file(s)...`);
       
       const payload = ShelbyBlobClient.createBatchRegisterBlobsPayload({
-        account: account as any,
+        account: walletAddress,
         expirationMicros: (Date.now() + 1000 * 60 * 60 * 24 * 30) * 1000,
         blobs: blobsPayloadInfo,
         encoding: 0
@@ -658,7 +658,7 @@ function App() {
         
         try {
           await shelbyClient.rpc.putBlob({
-            account: account as any,
+            account: walletAddress,
             blobName: item.file.name,
             blobData: data,
           });
