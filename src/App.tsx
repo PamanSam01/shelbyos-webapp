@@ -138,8 +138,9 @@ function App() {
       console.log(`[Vault] GraphQL Sync Complete: ${historyWithPerms.length} files.`);
     } catch (err: any) {
       console.error("[Vault] History Sync Failed (GraphQL):", err);
-      if (!err?.message?.includes('Abort')) {
-        setHistoryError("Indexer Sync Offline");
+      const msg = err?.message || String(err);
+      if (!msg.includes('Abort')) {
+        setHistoryError(`Indexer Sync Offline: ${msg.slice(0, 30)}`);
       }
     } finally {
       setIsHistoryLoading(false);

@@ -34,11 +34,10 @@ export async function fetchBlobsFromIndexer(
 ): Promise<IndexerBlob[]> {
   // Correct Aptos Indexer GraphQL schema — use user_transactions root field
   const query = `
-    query ShelbyBlobHistory($addr: String!, $contract: String!, $limit: Int!) {
+    query ShelbyBlobHistory($addr: String!, $limit: Int!) {
       user_transactions(
         where: {
           sender: { _eq: $addr }
-          entry_function_id_str: { _like: $contract }
         }
         order_by: { timestamp: desc }
         limit: $limit
@@ -64,7 +63,6 @@ export async function fetchBlobsFromIndexer(
         query,
         variables: {
           addr: walletAddress.toLowerCase(),
-          contract: `${contract}::%`, // Match any function in the contract module
           limit,
         },
       }),
@@ -79,18 +77,28 @@ export async function fetchBlobsFromIndexer(
 
     const json = await res.json();
 
-    // Surface any GraphQL errors
     if (json.errors && json.errors.length > 0) {
-      console.warn('[Indexer] GraphQL errors:', json.errors);
-      throw new Error(json.errors[0]?.message || 'GraphQL error');
+      const errMsg = json.errors[0]?.message || 'GraphQL error';
+      console.error('[Indexer] GraphQL Error Response:', json.errors);
+      throw new Error(errMsg);
     }
 
-    const allRows: any[] = json?.data?.user_transactions ?? [];
+    let allRows: any[] = json?.data?.user_transactions ?? [];
     
+    // If empty, it might be because this indexer uses account_transactions schema
+    if (allRows.length === 0 && !json?.data?.user_transactions) {
+       console.warn('[Indexer] user_transactions table missing or empty. This might be a legacy indexer.');
+    }
+    
+    console.log(`[Indexer] GraphQL returned ${allRows.length} events/txns`);
     // 1. Identify all deletions first to filter later
     const deletedBlobNames = new Set<string>();
+    const contractClean = contract.toLowerCase().replace('0x','');
+    
     for (const tx of allRows) {
       const fn = tx.entry_function_id_str || '';
+      if (!fn.toLowerCase().includes(contractClean)) continue;
+
       const payload = tx.payload || {};
       const args = payload.function?.arguments || payload.arguments || [];
 
@@ -103,10 +111,12 @@ export async function fetchBlobsFromIndexer(
       }
     }
 
-    // 2. Process registrations
+    // 2. Process registrations (with local filtering for contract)
     const history: IndexerBlob[] = [];
+    
     for (const tx of allRows) {
       const fn = tx.entry_function_id_str || '';
+      if (!fn.toLowerCase().includes(contractClean)) continue;
       if (!fn.includes('register_')) continue;
 
       const payload = tx.payload || {};
