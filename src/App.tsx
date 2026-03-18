@@ -113,10 +113,9 @@ function App() {
     }
   };
 
-  // Helper: Fetch vault history from auth-free Aptos REST API
-  // Step 1: Get candidate blobs from transaction history
-  // Step 2: ON-CHAIN LOCK - verify each blob against get_blob_metadata view (auth-free)
-  // Files deleted on-chain return {vec:[]} and are automatically excluded.
+  // Helper: Fetch vault history from Shelby GraphQL Indexer (same source as Explorer)
+  // Multi-API-key fallback: tries every key from ENV until one succeeds.
+  // Also tries both walletAddress and rawAddress to handle Google Keyless wallets.
   const fetchVaultHistory = useCallback(async () => {
     if (!walletAddress || !ACTIVE_NET) return;
 
@@ -124,147 +123,118 @@ function App() {
     setHistoryError(null);
 
     try {
-      const aptosRpc = ACTIVE_NET.aptosRpc;
-      const deployer = (ACTIVE_NET as any).deployer || ACTIVE_NET.contract;
-      const pageSize = 100;
+      // Collect all API keys from env (comma-separated)
+      const rawKeysShelby = (import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET ?? '').split(',');
+      const rawKeysTestnet = (import.meta.env.VITE_SHELBY_API_KEY_TESTNET ?? '').split(',');
+      const allKeys = [...new Set([...rawKeysShelby, ...rawKeysTestnet])]
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
 
-      // Try both rawAddress and walletAddress to handle Google Keyless short addresses
-      const candidates = Array.from(new Set([rawAddress.toLowerCase(), walletAddress.toLowerCase()])).filter(Boolean);
+      if (allKeys.length === 0) {
+        setHistoryError('No API keys found. Please set VITE_SHELBY_API_KEY_SHELBYNET in .env');
+        return;
+      }
 
-      let allBlobTxs: any[] = [];
+      // Try both full and short addresses (Google Keyless has a longer AA address)
+      const rawAddr = walletAddress.length > 66 ? '0x' + walletAddress.slice(-64) : walletAddress;
+      const addrCandidates = Array.from(
+        new Set([walletAddress.toLowerCase(), rawAddr.toLowerCase()])
+      );
+
+      const GQL_QUERY = `
+        query getBlobs($where: blobs_bool_exp) {
+          blobs(where: $where, order_by: { created_at: desc }) {
+            owner
+            blob_name
+            created_at
+            size
+            transaction_version
+            is_deleted
+          }
+        }
+      `;
+
+      let finalBlobs: any[] | null = null;
       let usedAddr = walletAddress.toLowerCase();
 
-      for (const addr of candidates) {
-        const fetched: any[] = [];
-        let start: number | undefined = undefined;
+      // Try each key and each address until we get a successful non-empty response
+      outer:
+      for (const key of allKeys) {
+        for (const addr of addrCandidates) {
+          try {
+            const res = await fetch(ACTIVE_NET.shelbyIndexer, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`,
+              },
+              body: JSON.stringify({
+                query: GQL_QUERY,
+                variables: {
+                  where: {
+                    owner: { _eq: addr },
+                    is_deleted: { _eq: 0 },
+                  },
+                },
+              }),
+            });
 
-        for (let page = 0; page < 5; page++) {
-          const url = start !== undefined
-            ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
-            : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
+            if (res.status === 401 || res.status === 403) {
+              console.warn(`[Vault] API key rejected (${res.status}):`, key.slice(0, 20) + '...');
+              break; // This key is invalid, try next key
+            }
 
-          const res = await fetch(url).catch(() => null);
-          if (!res || !res.ok) break;
+            if (!res.ok) continue;
 
-          const txns: any[] = await res.json().catch(() => []);
-          if (!Array.isArray(txns) || txns.length === 0) break;
+            const json = await res.json().catch(() => null);
+            if (!json?.data?.blobs) continue;
 
-          const relevant = txns.filter((tx: any) => {
-            if (tx.type !== 'user_transaction') return false;
-            const fn: string = tx.payload?.function ?? '';
-            return fn.includes('register_blob') || fn.includes('register_multiple_blobs');
-          });
-          fetched.push(...relevant);
-
-          const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-          if (versions.length > 0) start = Math.min(...versions) - 1;
-          else break;
-          if (start < 0 || txns.length < pageSize) break;
-        }
-
-        if (fetched.length > 0) {
-          allBlobTxs = fetched;
-          usedAddr = addr;
-          console.log(`[Vault] Found ${fetched.length} register txs for address: ${addr}`);
-          break;
+            const blobs: any[] = json.data.blobs;
+            // If we found data for this addr, lock in and stop
+            finalBlobs = blobs;
+            usedAddr = addr;
+            console.log(`[Vault] GraphQL found ${blobs.length} active blob(s) for ${addr}`);
+            break outer;
+          } catch (e) {
+            console.warn('[Vault] GraphQL fetch error:', e);
+          }
         }
       }
 
-      if (allBlobTxs.length === 0) {
+      if (finalBlobs === null) {
+        throw new Error('All API keys failed to fetch vault history from GraphQL Indexer.');
+      }
+
+      if (finalBlobs.length === 0) {
         setFiles([]);
         return;
       }
 
-      // Sort oldest first
-      allBlobTxs.sort((a: any, b: any) => parseInt(a.version) - parseInt(b.version));
+      const history: StoredFile[] = finalBlobs.map((blob: any) => {
+        // Decode blob_name: strip owner prefix if present, decode hex if needed
+        let name: string = blob.blob_name ?? '';
+        if (name.includes('/')) name = name.split('/').slice(1).join('/');
+        if (name.startsWith('0x')) name = decodeHexName(name);
 
-      // Build a map of all blob registrations (newest overrides duplicate names)
-      const registeredMap = new Map<string, any>(); // name -> tx record
-
-      for (const tx of allBlobTxs) {
-        const fn: string = tx.payload?.function ?? '';
-        const args: any[] = tx.payload?.arguments ?? [];
-
-        if (fn.includes('register_multiple_blobs')) {
-          const names: string[] = Array.isArray(args[0]) ? args[0] : [];
-          const sizes: any[] = Array.isArray(args[3]) ? args[3] : (Array.isArray(args[4]) ? args[4] : []);
-          names.forEach((rawName, i) => {
-            const name = decodeHexName(rawName);
-            const size = parseInt(sizes[i]) || 0;
-            registeredMap.set(name, { tx, name, size });
-          });
-        } else if (fn.includes('register_blob')) {
-          const rawName = args[0];
-          if (typeof rawName === 'string') {
-            const name = decodeHexName(rawName);
-            const size = parseInt(args[3] ?? args[4] ?? '0') || 0;
-            registeredMap.set(name, { tx, name, size });
-          }
-        }
-      }
-
-      console.log(`[Vault] Candidates from tx history: ${registeredMap.size}`);
-
-      // === ON-CHAIN LOCK ===
-      // Verify each candidate with get_blob_metadata view function.
-      // This is auth-free and directly reflects the blockchain state.
-      // Deleted blobs return {vec:[]} and are excluded.
-      const verifiedEntries: any[] = [];
-
-      await Promise.all(
-        Array.from(registeredMap.values()).map(async (entry) => {
-          try {
-            const blobKey = `${usedAddr}/${entry.name}`;
-            const viewRes = await fetch(`${aptosRpc}/view`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                function: `${deployer}::blob_metadata::get_blob_metadata`,
-                type_arguments: [],
-                arguments: [blobKey],
-              }),
-            });
-            if (!viewRes.ok) return;
-            const viewData: any[] = await viewRes.json().catch(() => []);
-            // viewData[0].vec is non-empty only when the blob exists on-chain
-            const exists = Array.isArray(viewData) && viewData[0]?.vec?.length > 0;
-            if (exists) {
-              const meta = viewData[0].vec[0];
-              entry.size = parseInt(meta?.size ?? entry.size) || entry.size;
-              verifiedEntries.push(entry);
-            } else {
-              console.log(`[Vault Lock] Filtered deleted blob: ${entry.name}`);
-            }
-          } catch {
-            // On error, include optimistically (fail-open)
-            verifiedEntries.push(entry);
-          }
-        })
-      );
-
-      console.log(`[Vault] Verified on-chain blobs: ${verifiedEntries.length}`);
-
-      // Sort newest first
-      verifiedEntries.sort((a, b) => parseInt(b.tx.version) - parseInt(a.tx.version));
-
-      const history: StoredFile[] = verifiedEntries.map(({ tx, name, size }) => {
-        const tsMicro = parseInt(tx.timestamp) || 0;
-        const d = new Date(tsMicro / 1000);
         const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+        // created_at from indexer is microseconds epoch
+        const tsMicro = parseInt(blob.created_at) || 0;
+        const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
+
         return {
-          id: parseInt(tx.version) || Date.now() + Math.random(),
+          id: parseInt(blob.transaction_version) || Date.now() + Math.random(),
           name,
           ext,
-          size,
+          size: parseInt(blob.size) || 0,
           date: d.toISOString().split('T')[0],
           time: d.toTimeString().slice(0, 5),
-          uploader: usedAddr,
+          uploader: blob.owner ?? usedAddr,
           status: 'stored' as const,
           vis: 'public' as any,
           permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
           network: ACTIVE_NET.label,
           cid: name,
-          txHash: tx.hash || '',
+          txHash: '',
         };
       });
 
@@ -274,7 +244,11 @@ function App() {
         if (saved) {
           try {
             const cfg = JSON.parse(saved);
-            return { ...f, permConfig: cfg, vis: cfg.type === 'public' ? 'public' : cfg.type === 'allowlist' ? 'private' : 'encrypted' as any };
+            return {
+              ...f,
+              permConfig: cfg,
+              vis: cfg.type === 'public' ? 'public' : cfg.type === 'allowlist' ? 'private' : 'encrypted' as any
+            };
           } catch { /* ignore */ }
         }
         return f;
@@ -287,7 +261,7 @@ function App() {
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [walletAddress, rawAddress, ACTIVE_NET, activeNetKey]);
+  }, [walletAddress, ACTIVE_NET, activeNetKey]);
 
 
 
