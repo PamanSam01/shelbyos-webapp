@@ -40,7 +40,9 @@ function App() {
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
   const walletConnected = connected || manualWalletId !== null;
-  const walletAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
+  const rawAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
+  // Pad the address to 64 characters to support Google Keyless accounts without leading zeros
+  const walletAddress = rawAddress ? '0x' + (rawAddress.startsWith('0x') ? rawAddress.slice(2) : rawAddress).padStart(64, '0').toLowerCase() : '';
   
   // Mock balances
   const [aptBalance, setAptBalance] = useState('0.00')
@@ -105,11 +107,7 @@ function App() {
     setHistoryError(null);
 
     try {
-      // Normalize wallet address to full 64-char padded hex
-      let addr = walletAddress.toLowerCase();
-      const rawHex = addr.startsWith('0x') ? addr.slice(2) : addr;
-      addr = '0x' + rawHex.padStart(64, '0');
-
+      const addr = walletAddress.toLowerCase();
       const aptosRpc = ACTIVE_NET.aptosRpc;
 
       // Fetch transactions with pagination (up to 200)
@@ -128,27 +126,57 @@ function App() {
         const txns: any[] = await res.json().catch(() => []);
         if (!Array.isArray(txns) || txns.length === 0) break;
 
-        // Filter for register_blob transactions
-        const blobTxs = txns.filter((tx: any) => {
+        // Filter for blob registrations and deletions
+        const relevantTxs = txns.filter((tx: any) => {
           if (tx.type !== 'user_transaction') return false;
           const fn: string = tx.payload?.function ?? '';
-          return fn.includes('register_blob') || fn.includes('::storage::');
+          return fn.includes('register_blob') || fn.includes('::storage::') || fn.includes('delete_blob') || fn.includes('delete_multiple_blobs');
         });
-        allBlobTxs.push(...blobTxs);
+        allBlobTxs.push(...relevantTxs);
 
         // Get lowest version for next page
         const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-        if (versions.length === 0 || versions.length < pageSize) break;
-        start = Math.min(...versions);
+        if (versions.length > 0) {
+          start = Math.min(...versions) - 1;
+        } else {
+          break;
+        }
+        if (start < 0) break;
+        if (txns.length < pageSize) break; // Reached the end
       }
-
-      console.log(`[Vault] Found ${allBlobTxs.length} blob transactions via Aptos REST API`);
+      
+      console.log(`[Vault] Found ${allBlobTxs.length} blob-related transactions via Aptos REST API`);
 
       if (allBlobTxs.length > 0) {
         // Sort newest first
         allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
 
-        const history: StoredFile[] = allBlobTxs.map((tx: any) => {
+        // Identify deleted blobs
+        const deletedBlobNames = new Set<string>();
+        for (const tx of allBlobTxs) {
+          const fn: string = tx.payload?.function ?? '';
+          const args: any[] = tx.payload?.arguments ?? [];
+          if (fn.includes('delete_blob') && args.length >= 1 && typeof args[0] === 'string') {
+            deletedBlobNames.add(args[0]);
+          } else if (fn.includes('delete_multiple_blobs') && args.length >= 1 && Array.isArray(args[0])) {
+            args[0].forEach((name: string) => deletedBlobNames.add(name));
+          }
+        }
+
+        // Filter out deletions and already-deleted blobs
+        const activeBlobTxs = allBlobTxs.filter((tx: any) => {
+          const fn: string = tx.payload?.function ?? '';
+          if (fn.includes('delete_blob') || fn.includes('delete_multiple_blobs')) return false;
+          
+          const args: any[] = tx.payload?.arguments ?? [];
+          let name = 'Vault Asset';
+          if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
+            name = args[0];
+          }
+          return !deletedBlobNames.has(name);
+        });
+
+        const history: StoredFile[] = activeBlobTxs.map((tx: any) => {
           const args: any[] = tx.payload?.arguments ?? [];
 
           // args[0] is the blob name — it's a plain decoded string from the Aptos API
