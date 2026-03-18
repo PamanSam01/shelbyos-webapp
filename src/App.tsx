@@ -555,7 +555,7 @@ function App() {
     }
   }
 
-  async function uploadToShelby(file: File, account: string) {
+  const uploadToShelby = async (file: File, account: string | any, provider: any) => {
     // API key: ShelbyNet requires one, Testnet public endpoint does not
     const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
     const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET; // optional
@@ -581,13 +581,11 @@ function App() {
       addLog('PROC', `Generating erasure coding for ${file.name}...`);
       const {
         generateCommitments,
-        createDefaultErasureCodingProvider,
         ShelbyBlobClient,
         ShelbyClient,
         expectedTotalChunksets,
       } = await import("@shelby-protocol/sdk/browser");
 
-      const provider = await createDefaultErasureCodingProvider();
       const data = new Uint8Array(await file.arrayBuffer());
       const commitments = await generateCommitments(provider, data);
 
@@ -676,6 +674,9 @@ function App() {
     const total = readyItems.length;
     let done = 0;
 
+    const { createDefaultErasureCodingProvider } = await import('@shelby-protocol/sdk/browser') as any;
+    const provider = await createDefaultErasureCodingProvider();
+
     for (const item of uploadQueue) {
       if (item.status !== 'ready') continue;
 
@@ -683,7 +684,7 @@ function App() {
       setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
       setUploadQueue([...uploadQueue]);
 
-      const result = await uploadToShelby(item.file, walletAddress);
+      const result = await uploadToShelby(item.file, walletAddress, provider);
 
       if (result.success) {
         const now = new Date();
