@@ -57,6 +57,7 @@ function App() {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
   const [isAccessDeniedOpen, setIsAccessDeniedOpen] = useState(false)
   const [returnToUpload, setReturnToUpload] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   
   // Data State
   const [selectedFile, setSelectedFile] = useState<StoredFile | null>(null)
@@ -961,6 +962,8 @@ function App() {
         <div className="layout">
           <VaultTable
             files={files}
+            checkedIds={checkedIds}
+            onCheckedIdsChange={setCheckedIds}
             isLoading={isHistoryLoading}
             error={historyError}
             walletConnected={walletConnected}
