@@ -175,151 +175,18 @@ function App() {
           setFiles(historyWithPerms);
           return; // Exit early!
         }
-      } catch (gqlErr) {
-        console.warn('[Vault] GraphQL Indexer failed, falling back to Aptos REST API', gqlErr);
-      }
-
-      // 2. Fallback: Fetch transactions from Aptos REST API directly
-      const aptosRpc = ACTIVE_NET.aptosRpc;
-      const allBlobTxs: any[] = [];
-      const pageSize = 100;
-      let start: number | undefined = undefined;
-
-      for (let page = 0; page < 10; page++) {
-        const url = start !== undefined
-          ? `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}&start=${start}`
-          : `${aptosRpc}/accounts/${addr}/transactions?limit=${pageSize}`;
-
-        const res = await fetch(url).catch(() => null);
-        if (!res || !res.ok) break;
-
-        const txns: any[] = await res.json().catch(() => []);
-        if (!Array.isArray(txns) || txns.length === 0) break;
-
-        // Filter for both register and delete transactions
-        const blobTxs = txns.filter((tx: any) => {
-          if (tx.type !== 'user_transaction') return false;
-          const fn: string = tx.payload?.function ?? '';
-          return fn.includes('register_blob') || fn.includes('register_multiple_blobs') || 
-                 fn.includes('delete_blob') || fn.includes('delete_multiple_blobs') || 
-                 fn.includes('::storage::');
-        });
-        allBlobTxs.push(...blobTxs);
-
-        const versions = txns.map((t: any) => parseInt(t.version)).filter(v => !isNaN(v));
-        if (versions.length === 0 || versions.length < pageSize) break;
-        start = Math.min(...versions);
-      }
-
-      console.log(`[Vault] Found ${allBlobTxs.length} blob transactions via Aptos REST API`);
-
-      if (allBlobTxs.length > 0) {
-        // Sort newest first
-        allBlobTxs.sort((a: any, b: any) => (parseInt(b.timestamp) || 0) - (parseInt(a.timestamp) || 0));
-
-        const activeBlobs: any[] = [];
-        const deletedNames = new Set<string>();
-
-        // Process from newest to oldest
-        for (const tx of allBlobTxs) {
-          const fn: string = tx.payload?.function ?? '';
-          const args: any[] = tx.payload?.arguments ?? [];
-
-          // Multi-delete check (Args[0] is array)
-          if (fn.includes('delete_multiple_blobs')) {
-            if (args.length >= 1 && Array.isArray(args[0])) {
-              args[0].forEach((n: any) => { if (typeof n === 'string') deletedNames.add(n); });
-            }
-            continue;
-          }
-
-          // Multi-register check (Args[0] is array)
-          if (fn.includes('register_multiple_blobs')) {
-            if (args.length >= 1 && Array.isArray(args[0])) {
-              args[0].forEach((n: any, idx: number) => {
-                if (typeof n === 'string' && !deletedNames.has(n)) {
-                  activeBlobs.push({ tx, nameOverride: n, sizeOverride: args[4]?.[idx] });
-                  deletedNames.add(n);
-                }
-              });
-            }
-            continue;
-          }
-
-          // Single register/delete
-          let name = '';
-          if (args.length >= 1 && typeof args[0] === 'string' && args[0].length > 0) {
-            name = args[0];
-          }
-
-          if (fn.includes('delete_blob')) {
-            if (name) deletedNames.add(name);
-          } else {
-            // It's a single register_blob
-            if (name && !deletedNames.has(name)) {
-              activeBlobs.push({ tx, nameOverride: name, sizeOverride: args[4] });
-              deletedNames.add(name);
-            }
-          }
+      } catch (gqlErr: any) {
+        console.warn('[Vault] GraphQL Indexer failed:', gqlErr);
+        // We drop the REST API fallback to prevent "Ghost Files" entirely.
+        // The REST fallback couldn't reliably track is_written or complex indexer states.
+        // If the indexer fails (e.g. 401 Unauthorized due to missing Vercel API Key),
+        // we show an empty vault safely to match the Explorer's "0 blobs found".
+        setFiles([]);
+        if (gqlErr.message?.includes('401') || gqlErr.message?.includes('Unauthorized')) {
+          setHistoryError('Please configure your VITE_SHELBY_API_KEY_TESTNET in Vercel to sync history.');
         }
-
-        const currentMicros = Date.now() * 1000;
-
-        const history: StoredFile[] = activeBlobs
-          .filter((item: any) => {
-            const args: any[] = item.tx.payload?.arguments ?? [];
-            const expirationStr = args[1];
-            if (expirationStr) {
-               const expiration = parseInt(expirationStr);
-               if (!isNaN(expiration) && expiration < currentMicros) {
-                 return false; // Expired!
-               }
-            }
-            return true;
-          })
-          .map((item: any) => {
-          const tx = item.tx;
-          const name = item.nameOverride;
-          const size = parseInt(item.sizeOverride) || parseInt(item.tx.payload?.arguments?.[3]) || 0;
-          
-          const tsMicro = parseInt(tx.timestamp) || 0;
-          const d = new Date(tsMicro / 1000);
-          const ext = name.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-
-          return {
-            id: tx.version,
-            name,
-            ext,
-            size,
-            date: d.toISOString().split('T')[0],
-            time: d.toTimeString().slice(0, 5),
-            uploader: addr,
-            status: 'stored' as const,
-            vis: 'public' as any,
-            permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-            network: ACTIVE_NET.label,
-            cid: name,
-            txHash: tx.hash || '',
-          };
-        });
-
-        const historyWithPerms = history.map(f => {
-          const storageKey = `shelbyos_perm_${addr}/${f.name}`;
-          const saved = localStorage.getItem(storageKey);
-          if (saved) {
-            try {
-              const savedConfig = JSON.parse(saved);
-              return { ...f, permConfig: savedConfig, vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any };
-            } catch { /* ignore */ }
-          }
-          return f;
-        });
-
-        setFiles(historyWithPerms);
-        return;
       }
 
-      console.warn('[Vault] No blob transactions found for this address.');
     } catch (err: any) {
       console.warn('[Vault] Error fetching vault history:', err?.message);
       setHistoryError(err?.message || 'Failed to sync history');
