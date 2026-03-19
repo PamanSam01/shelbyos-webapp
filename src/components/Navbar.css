@@ -130,11 +130,11 @@
 }
 
 @media screen and (max-width: 800px) {
-  .nav { flex-wrap: wrap; height: auto; justify-content: center; padding: 10px; }
-  .navLinks { margin: 8px 0; width: 100%; justify-content: center; }
+  .nav { flex-wrap: wrap; height: auto; justify-content: flex-start; padding: 10px; }
+  .navLinks { margin: 8px 0; width: 100%; justify-content: flex-start; padding-left: 5px; }
   .navRight { 
     width: 100%; 
-    justify-content: center;
+    justify-content: flex-start;
     flex-wrap: wrap; 
     padding-top: 8px; 
     margin-top: 2px; 
@@ -152,11 +152,11 @@
     margin-top: 10px;
   }
   .navControl {
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     font-size: 11px;
   }
-  .select95 { width: 100%; max-width: 100px; }
+  .select95 { width: 100%; max-width: 120px; }
   .btn95 {
     width: 100%;
     padding: 6px 4px;

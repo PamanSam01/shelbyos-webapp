@@ -56,10 +56,12 @@ const Navbar: React.FC<NavbarProps> = ({
             <option value="theme-neon">🌐 Neon</option>
           </select>
         </label>
-        <button className="btn95" onClick={onFundAccount}>Fund Account</button>
         <button className="btn95" onClick={onConnectWallet}>
           {walletConnected ? 'Disconnect' : 'Connect Wallet'}
         </button>
+        {walletConnected && (
+          <button className="btn95" onClick={onFundAccount}>Fund Account</button>
+        )}
       </div>
     </nav>
   );
