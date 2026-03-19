@@ -254,20 +254,34 @@ tbody tr.selected td {
   .table-wrap { max-height: calc(100vh - 350px); }
 }
 
-@media (orientation: portrait), (max-width: 768px) {
-  th:nth-child(4), td:nth-child(4) /* Date */, 
-  th:nth-child(5), td:nth-child(5) /* Uploader */ {
+/* Tablet: hide Date and Uploader */
+@media screen and (max-width: 768px), screen and (orientation: portrait) {
+  th:nth-child(4), td:nth-child(4),
+  th:nth-child(5), td:nth-child(5) {
     display: none;
   }
   .table-wrap { overflow-x: auto; width: 100%; }
 }
 
-@media (max-width: 480px) {
-  th:nth-child(2), td:nth-child(2) /* Size */ {
-     display: none;
+/* Mobile: also hide Size and Status, compress actions */
+@media screen and (max-width: 600px) {
+  th:nth-child(3), td:nth-child(3),
+  th:nth-child(4), td:nth-child(4),
+  th:nth-child(5), td:nth-child(5),
+  th:nth-child(6), td:nth-child(6) {
+    display: none;
   }
-  table { min-width: 100%; }
-  .icon-btn95 { padding: 4px 10px; font-size: 14px; } /* Larger touch targets */
+  .table-wrap { overflow-x: hidden; }
+  table { min-width: 0; width: 100%; table-layout: fixed; }
+  /* Checkbox col: don't grow */
+  th:nth-child(1), td:nth-child(1) { width: 28px; padding: 3px 4px; }
+  /* File col: takes all remaining space, truncate */
+  th:nth-child(2), td:nth-child(2) { max-width: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Actions col: compact */
+  th:last-child, td:last-child { width: auto; white-space: nowrap; padding: 2px 3px; }
+  .icon-btn95 { padding: 4px 6px; font-size: 13px; }
+  /* Hide perm pill and network badge on tiny screens */
+  .perm-pill, .hot-badge { display: none; }
 }
 
 /* ── Pagination Bar ─────────────────────────────── */

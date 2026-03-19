@@ -149,6 +149,7 @@
 @media (max-width: 480px) {
   .navTitle, .navSubtext { display: none; }
   .navLogoLink { margin-right: 4px; }
-  .navLink { font-size: 13px; padding: 4px; }
-  .btn95 { padding: 4px 10px; font-size: 12px; }
+  .navLink { font-size: 12px; padding: 3px; }
+  .btn95 { padding: 3px 8px; font-size: 11px; }
+  .navRight { gap: 4px; }
 }
