@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './VaultTable.css';
 
 export interface StoredFile {
@@ -43,8 +43,8 @@ const PAGE_SIZE = 10;
 const truncateName = (name: string, maxLen = 24) =>
   name.length > maxLen ? name.slice(0, maxLen) + '…' : name;
 
-/** A single swipeable mobile card row */
-const SwipeRow: React.FC<{
+/** A single tap-to-expand mobile row with action buttons below */
+const ExpandableRow: React.FC<{
   file: StoredFile;
   checked: boolean;
   onToggle: () => void;
@@ -56,110 +56,50 @@ const SwipeRow: React.FC<{
   onDownload?: () => void;
   onDelete?: () => void;
 }> = ({ file, checked, onToggle, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
-  const [offset, setOffset] = useState(0);
-  const [open, setOpen] = useState(false);
-  const [animating, setAnimating] = useState(false);
-  const startX = useRef(0);
-  const baseOffset = useRef(0);
-  const hasMoved = useRef(false);
-  const ACTION_W = 200;
-
-  const snapTo = (target: number, newOpen: boolean) => {
-    setAnimating(true);
-    setOffset(target);
-    setOpen(newOpen);
-    setTimeout(() => setAnimating(false), 250);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX;
-    baseOffset.current = open ? -ACTION_W : 0;
-    hasMoved.current = false;
-    setAnimating(false);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const dx = e.touches[0].clientX - startX.current;
-    if (Math.abs(dx) > 5) {
-      hasMoved.current = true;
-      e.preventDefault();
-    }
-    const newOffset = Math.max(-ACTION_W, Math.min(0, baseOffset.current + dx));
-    setOffset(newOffset);
-  };
-
-  const handleTouchEnd = () => {
-    if (!hasMoved.current) {
-      // Treated as tap — just toggle checkbox
-      return;
-    }
-    const threshold = ACTION_W * 0.35;
-    if (!open && offset < -threshold) {
-      snapTo(-ACTION_W, true);
-    } else if (open && offset > -ACTION_W + threshold) {
-      snapTo(0, false);
-    } else {
-      snapTo(open ? -ACTION_W : 0, open);
-    }
-  };
+  const [expanded, setExpanded] = useState(false);
 
   const handleRowClick = () => {
-    if (hasMoved.current) return;
-    onToggle();
-  };
-
-  const togglePanel = (e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    if (open) snapTo(0, false);
-    else snapTo(-ACTION_W, true);
+    setExpanded(prev => !prev);
   };
 
   const act = (fn?: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    snapTo(0, false);
+    setExpanded(false);
     fn?.();
   };
 
   return (
-    <div className="swipe-row-wrapper">
-      <div
-        className={`swipe-row-content${checked ? ' swipe-row-selected' : ''}`}
-        style={{
-          transform: `translateX(${offset}px)`,
-          transition: animating ? 'transform 0.22s cubic-bezier(0.4,0,0.2,1)' : 'none',
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleRowClick}
-      >
-        <div className="swipe-row-check">
-          <input type="checkbox" checked={checked} onClick={(e) => e.stopPropagation()} onChange={onToggle} />
+    <div className={`exp-row-wrapper${expanded ? ' exp-row-open' : ''}`}>
+      {/* Main clickable row */}
+      <div className="exp-row-main" onClick={handleRowClick}>
+        <div className="exp-row-check" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+          <input type="checkbox" checked={checked} onChange={onToggle} readOnly />
         </div>
-        <div className="swipe-row-info">
-          <div className="swipe-row-top">
+        <div className="exp-row-info">
+          <div className="exp-row-top">
             <span className="ext-icon" style={{ background: extColor(file.ext) }}>{file.ext.slice(0, 2)}</span>
-            <span className="swipe-row-name" title={file.name}>{truncateName(file.name, 22)}</span>
+            <span className="exp-row-name" title={file.name}>{truncateName(file.name, 26)}</span>
           </div>
-          <div className="swipe-row-meta">
+          <div className="exp-row-meta">
             {fmtSize(file.size)}
             {file.status === 'stored'
               ? <span className="badge-stored"> · STORED</span>
               : <span className="badge-pending"> · PENDING</span>}
           </div>
         </div>
-        <button className="swipe-row-hint-btn" onClick={togglePanel} onTouchEnd={(e) => { e.preventDefault(); togglePanel(e as unknown as React.MouseEvent); }}>
-          {open ? '✕' : '◀'}
-        </button>
+        <div className="exp-row-chevron">{expanded ? '▲' : '▼'}</div>
       </div>
 
-      <div className="swipe-actions" style={{ width: ACTION_W }}>
-        <button className="swipe-btn swipe-btn-preview"  onClick={act(onPreview)}>👁<span>Preview</span></button>
-        <button className="swipe-btn swipe-btn-link"     onClick={act(onOpenExplorer)}>🔗<span>Explorer</span></button>
-        <button className="swipe-btn swipe-btn-copy"     onClick={act(onCopyLink)}>📋<span>Copy</span></button>
-        <button className="swipe-btn swipe-btn-download" onClick={act(onDownload)}>⬇<span>Download</span></button>
-        <button className="swipe-btn swipe-btn-delete"   onClick={act(onDelete)}>🗑<span>Delete</span></button>
-      </div>
+      {/* Expandable action panel */}
+      {expanded && (
+        <div className="exp-actions">
+          <button className="exp-btn exp-btn-preview"  onClick={act(onPreview)}>👁<span>Preview</span></button>
+          <button className="exp-btn exp-btn-link"     onClick={act(onOpenExplorer)}>🔗<span>Explorer</span></button>
+          <button className="exp-btn exp-btn-copy"     onClick={act(onCopyLink)}>📋<span>Copy</span></button>
+          <button className="exp-btn exp-btn-download" onClick={act(onDownload)}>⬇<span>Download</span></button>
+          <button className="exp-btn exp-btn-delete"   onClick={act(onDelete)}>🗑<span>Delete</span></button>
+        </div>
+      )}
     </div>
   );
 };
@@ -285,11 +225,11 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
           </select>
         </div>
 
-        {/* ─── MOBILE SWIPE CARD LIST (shown only on mobile via CSS) ─── */}
+        {/* ─── MOBILE EXPANDABLE CARD LIST (shown only on mobile via CSS) ─── */}
         <div className="mobile-vault-list">
           {emptyState}
           {!emptyState && pageFiles.map(s => (
-            <SwipeRow
+            <ExpandableRow
               key={s.id}
               file={s}
               checked={checkedIds.has(s.id)}
