@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './VaultTable.css';
 
 export interface StoredFile {
@@ -29,7 +29,7 @@ interface ShelbyVaultTableProps {
   onCopyLink?: (id: number) => void;
   onDownload?: (id: number) => void;
   onDelete?: (id: number) => void;
-  onManagePermission?: (id: number) => void;
+  onManagePermission?: (id: number, config: any) => void;
   onPermissionChange?: (id: number, config: any) => void;
   isLoading?: boolean;
   error?: string | null;
@@ -38,6 +38,95 @@ interface ShelbyVaultTableProps {
 }
 
 const PAGE_SIZE = 10;
+
+/** Truncate a long filename for mobile display */
+const truncateName = (name: string, maxLen = 24) =>
+  name.length > maxLen ? name.slice(0, maxLen) + '…' : name;
+
+/** A single swipeable mobile card row */
+const SwipeRow: React.FC<{
+  file: StoredFile;
+  checked: boolean;
+  onToggle: () => void;
+  extColor: (ext: string) => string;
+  fmtSize: (b: number) => string;
+  onPreview?: () => void;
+  onOpenExplorer?: () => void;
+  onCopyLink?: () => void;
+  onDownload?: () => void;
+  onDelete?: () => void;
+}> = ({ file, checked, onToggle, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
+  const [offset, setOffset] = useState(0);
+  const [open, setOpen] = useState(false);
+  const startX = useRef(0);
+  const currentOffset = useRef(0);
+  const ACTION_W = 200;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    currentOffset.current = open ? -ACTION_W : 0;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - startX.current;
+    const newOffset = Math.max(-ACTION_W, Math.min(0, currentOffset.current + dx));
+    setOffset(newOffset);
+  };
+
+  const handleTouchEnd = () => {
+    if (!open && offset < -ACTION_W / 3) {
+      setOffset(-ACTION_W);
+      setOpen(true);
+    } else if (open && offset > -ACTION_W * 0.66) {
+      setOffset(0);
+      setOpen(false);
+    } else {
+      setOffset(open ? -ACTION_W : 0);
+    }
+  };
+
+  const closePanel = () => { setOffset(0); setOpen(false); };
+
+  const act = (fn?: () => void) => { closePanel(); fn?.(); };
+
+  return (
+    <div className="swipe-row-wrapper">
+      <div
+        className={`swipe-row-content${checked ? ' swipe-row-selected' : ''}`}
+        style={{ transform: `translateX(${offset}px)`, transition: 'transform 0.2s ease' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={onToggle}
+      >
+        <div className="swipe-row-check">
+          <input type="checkbox" checked={checked} onClick={(e) => e.stopPropagation()} onChange={onToggle} />
+        </div>
+        <div className="swipe-row-info">
+          <div className="swipe-row-top">
+            <span className="ext-icon" style={{ background: extColor(file.ext) }}>{file.ext.slice(0, 2)}</span>
+            <span className="swipe-row-name" title={file.name}>{truncateName(file.name, 22)}</span>
+          </div>
+          <div className="swipe-row-meta">
+            {fmtSize(file.size)}
+            {file.status === 'stored'
+              ? <span className="badge-stored"> · STORED</span>
+              : <span className="badge-pending"> · PENDING</span>}
+          </div>
+        </div>
+        <div className="swipe-row-hint">{'◀'}</div>
+      </div>
+
+      <div className="swipe-actions" style={{ width: ACTION_W }}>
+        <button className="swipe-btn swipe-btn-preview" onTouchEnd={(e) => { e.stopPropagation(); act(onPreview); }} onClick={(e) => { e.stopPropagation(); act(onPreview); }}>👁<span>Preview</span></button>
+        <button className="swipe-btn swipe-btn-link" onTouchEnd={(e) => { e.stopPropagation(); act(onOpenExplorer); }} onClick={(e) => { e.stopPropagation(); act(onOpenExplorer); }}>🔗<span>Explorer</span></button>
+        <button className="swipe-btn swipe-btn-copy" onTouchEnd={(e) => { e.stopPropagation(); act(onCopyLink); }} onClick={(e) => { e.stopPropagation(); act(onCopyLink); }}>📋<span>Copy</span></button>
+        <button className="swipe-btn swipe-btn-download" onTouchEnd={(e) => { e.stopPropagation(); act(onDownload); }} onClick={(e) => { e.stopPropagation(); act(onDownload); }}>⬇<span>Download</span></button>
+        <button className="swipe-btn swipe-btn-delete" onTouchEnd={(e) => { e.stopPropagation(); act(onDelete); }} onClick={(e) => { e.stopPropagation(); act(onDelete); }}>🗑<span>Delete</span></button>
+      </div>
+    </div>
+  );
+};
 
 const VaultTable: React.FC<ShelbyVaultTableProps> = ({
   files,
@@ -94,7 +183,6 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
     (!filterStatus || f.status === filterStatus)
   );
 
-  // Reset to page 1 whenever search/filter changes
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filteredFiles.length / PAGE_SIZE));
@@ -109,6 +197,39 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
     setCheckedIds(newChecked);
   };
 
+  const emptyState = !walletConnected ? (
+    <div className="empty-vault">
+      <span className="empty-icon">🔌</span>
+      <strong>Wallet not connected</strong><br/>
+      Connect your wallet to view your upload history.<br/><br/>
+      <button className="btn95" onClick={onConnectWallet}>Connect Wallet</button>
+    </div>
+  ) : isLoading ? (
+    <div className="empty-vault">
+      <span className="empty-icon rotating">⏳</span>
+      <strong>Syncing with Shelby blockchain...</strong><br/>
+      Fetching your upload history.
+    </div>
+  ) : error ? (
+    <div className="empty-vault">
+      <span className="empty-icon">⚠️</span>
+      <strong style={{ color: 'var(--hot)' }}>RPC Error</strong><br/>
+      {error}
+    </div>
+  ) : files.length === 0 ? (
+    <div className="empty-vault">
+      <span className="empty-icon">🗄️</span>
+      <strong>Vault is empty</strong><br/>
+      Upload a file to start your history.
+    </div>
+  ) : filteredFiles.length === 0 ? (
+    <div className="empty-vault">
+      <span className="empty-icon">🔍</span>
+      No files match your search.
+    </div>
+  ) : null;
+
+
   return (
     <div className="window animate-entry delay-1" id="vaultWindow">
       <div className="titlebar">
@@ -119,56 +240,37 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
       </div>
       <div className="window-body">
         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-          <input
-            className="input95"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchInput(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <select
-            className="select95"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
+          <input className="input95" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchInput(e.target.value)} style={{ flex: 1 }} />
+          <select className="select95" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All</option>
             <option value="stored">Stored</option>
             <option value="pending">Pending</option>
           </select>
         </div>
 
-        <div className="table-wrap">
-          {!walletConnected ? (
-            <div className="empty-vault">
-              <span className="empty-icon">🔌</span>
-              <strong>Wallet not connected</strong><br/>
-              Connect your wallet to view your upload history.<br/><br/>
-              <button className="btn95" onClick={onConnectWallet}>Connect Wallet</button>
-            </div>
-          ) : isLoading ? (
-            <div className="empty-vault">
-              <span className="empty-icon rotating">⏳</span>
-              <strong>Syncing with Shelby blockchain...</strong><br/>
-              Fetching your upload history.
-            </div>
-          ) : error ? (
-            <div className="empty-vault">
-              <span className="empty-icon">⚠️</span>
-              <strong style={{ color: 'var(--hot)' }}>RPC Error</strong><br/>
-              {error}
-            </div>
-          ) : files.length === 0 ? (
-            <div className="empty-vault">
-              <span className="empty-icon">🗄️</span>
-              <strong>Vault is empty</strong><br/>
-              Upload a file to start your history.
-            </div>
-          ) : filteredFiles.length === 0 ? (
-            <div className="empty-vault">
-              <span className="empty-icon">🔍</span>
-              No files match your search.
-            </div>
-          ) : (
+        {/* ─── MOBILE SWIPE CARD LIST (shown only on mobile via CSS) ─── */}
+        <div className="mobile-vault-list">
+          {emptyState}
+          {!emptyState && pageFiles.map(s => (
+            <SwipeRow
+              key={s.id}
+              file={s}
+              checked={checkedIds.has(s.id)}
+              onToggle={() => toggleCheck(s.id)}
+              extColor={extColor}
+              fmtSize={fmtSize}
+              onPreview={() => onPreview?.(s.id)}
+              onOpenExplorer={() => onOpenExplorer?.(s.id)}
+              onCopyLink={() => onCopyLink?.(s.id)}
+              onDownload={() => onDownload?.(s.id)}
+              onDelete={() => onDelete?.(s.id)}
+            />
+          ))}
+        </div>
+
+        {/* ─── DESKTOP TABLE (hidden on mobile via CSS) ─── */}
+        <div className="table-wrap desktop-vault-table">
+          {emptyState || (
             <table>
               <thead>
                 <tr>
@@ -191,73 +293,27 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
                     purchasable: ['💰', 'Purchasable', 'perm-purchasable'],
                   };
                   const [pIcon, pLabel, pClass] = permMeta[permType] || permMeta.public;
-
                   return (
-                    <tr
-                      key={s.id}
-                      className={checkedIds.has(s.id) ? 'selected' : ''}
-                      onClick={() => toggleCheck(s.id)}
-                    >
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={checkedIds.has(s.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={() => toggleCheck(s.id)}
-                        />
-                      </td>
+                    <tr key={s.id} className={checkedIds.has(s.id) ? 'selected' : ''} onClick={() => toggleCheck(s.id)}>
+                      <td><input type="checkbox" checked={checkedIds.has(s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleCheck(s.id)} /></td>
                       <td>
                         <span className="ext-icon" style={{ background: extColor(s.ext) }}>{s.ext.slice(0, 2)}</span>
                         {s.name}
                         {s.vis === 'public' && s.status === 'stored' && <span className="hot-badge">HOT</span>}
-                        <span
-                          className={`perm-pill interactive ${pClass}`}
-                          title={`Change permissions for ${s.name}`}
-                          onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id); }}
-                        >
-                          {pIcon} {pLabel}
-                        </span>
-                        {s.network && (
-                          <span style={{ fontSize: '8px', padding: '1px 4px', background: 'var(--panel)', border: '1px solid var(--border-mid)', marginLeft: '3px', whiteSpace: 'nowrap' }}>
-                            {s.network}
-                          </span>
-                        )}
+                        <span className={`perm-pill interactive ${pClass}`} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
+                        {s.network && <span style={{ fontSize: '8px', padding: '1px 4px', background: 'var(--panel)', border: '1px solid var(--border-mid)', marginLeft: '3px', whiteSpace: 'nowrap' }}>{s.network}</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)' }}>{fmtSize(s.size)}</td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '12px' }}>{s.date || ''} {s.time || ''}</td>
-                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s.uploader || ''}>
-                        {shortenAddr(s.uploader || '')}
-                      </td>
-                      <td>
-                        <span className={s.status === 'stored' ? 'badge-stored' : 'badge-pending'}>
-                          {s.status.toUpperCase()}
-                        </span>
-                      </td>
+                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s.uploader || ''}>{shortenAddr(s.uploader || '')}</td>
+                      <td><span className={s.status === 'stored' ? 'badge-stored' : 'badge-pending'}>{s.status.toUpperCase()}</span></td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <span className="tip">
-                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button>
-                          <span className="tiptext">Preview file</span>
-                        </span>
-                        <span className="tip">
-                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button>
-                          <span className="tiptext">Open in Shelby Explorer</span>
-                        </span>
-                        <span className="tip">
-                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onCopyLink?.(s.id); }}>📋</button>
-                          <span className="tiptext">Copy explorer link</span>
-                        </span>
-                        <span className="tip">
-                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button>
-                          <span className="tiptext">Download file</span>
-                        </span>
-                        <span className="tip">
-                          <button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id); }}>🔒</button>
-                          <span className="tiptext">Manage Permissions</span>
-                        </span>
-                        <span className="tip">
-                          <button className="icon-btn95 del" onClick={(e) => { e.stopPropagation(); onDelete?.(s.id); }}>DEL</button>
-                          <span className="tiptext">Delete from vault</span>
-                        </span>
+                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button><span className="tiptext">Preview file</span></span>
+                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button><span className="tiptext">Open in Shelby Explorer</span></span>
+                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onCopyLink?.(s.id); }}>📋</button><span className="tiptext">Copy explorer link</span></span>
+                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button><span className="tiptext">Download file</span></span>
+                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>🔒</button><span className="tiptext">Manage Permissions</span></span>
+                        <span className="tip"><button className="icon-btn95 del" onClick={(e) => { e.stopPropagation(); onDelete?.(s.id); }}>DEL</button><span className="tiptext">Delete from vault</span></span>
                       </td>
                     </tr>
                   );
@@ -267,41 +323,18 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
           )}
         </div>
 
-        {/* Pagination bar — only shown when there are multiple pages */}
+        {/* Pagination bar */}
         {filteredFiles.length > PAGE_SIZE && (
           <div className="pagination-bar">
-            <button
-              className="page-btn95"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={safePage === 1}
-              title="Previous page"
-            >◀</button>
-
+            <button className="page-btn95" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} title="Previous page">◀</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
-              <button
-                key={pg}
-                className={`page-btn95${safePage === pg ? ' page-active' : ''}`}
-                onClick={() => setCurrentPage(pg)}
-                title={`Page ${pg}: files ${(pg - 1) * PAGE_SIZE + 1}–${Math.min(pg * PAGE_SIZE, filteredFiles.length)}`}
-              >
-                {pg}
-              </button>
+              <button key={pg} className={`page-btn95${safePage === pg ? ' page-active' : ''}`} onClick={() => setCurrentPage(pg)} title={`Page ${pg}`}>{pg}</button>
             ))}
-
-            <button
-              className="page-btn95"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={safePage === totalPages}
-              title="Next page"
-            >▶</button>
-
-            <span className="page-info">
-              {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredFiles.length)} of {filteredFiles.length} files
-            </span>
+            <button className="page-btn95" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} title="Next page">▶</button>
+            <span className="page-info">{pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredFiles.length)} of {filteredFiles.length} files</span>
           </div>
         )}
 
-        {/* File count (single page) */}
         {filteredFiles.length <= PAGE_SIZE && (
           <div style={{ marginTop: '5px', textAlign: 'right' }}>
             <span style={{ fontSize: '12px', color: 'var(--border-mid)' }}>

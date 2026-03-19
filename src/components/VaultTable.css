@@ -348,3 +348,126 @@ tbody tr.selected td {
   color: var(--border-mid);
   white-space: nowrap;
 }
+
+/* ─────────────────────────────────────────────────────
+   MOBILE vs DESKTOP VIEW SWITCHING
+   ───────────────────────────────────────────────────── */
+
+/* By default: show desktop table, hide mobile card list */
+.mobile-vault-list { display: none; }
+.desktop-vault-table { display: block; }
+
+/* On mobile/portrait: switch to mobile card list */
+@media screen and (max-width: 768px), screen and (orientation: portrait) {
+  .mobile-vault-list { display: block; margin-top: 8px; }
+  .desktop-vault-table { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────
+   SWIPE ROW STYLES
+   ───────────────────────────────────────────────────── */
+
+.swipe-row-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-mid);
+  background: #fff;
+}
+
+.swipe-row-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.swipe-row-content.swipe-row-selected {
+  background: #d0e4ff;
+}
+
+.swipe-row-check {
+  flex-shrink: 0;
+}
+
+.swipe-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.swipe-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.swipe-row-name {
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.swipe-row-meta {
+  font-size: 11px;
+  color: var(--border-mid);
+  margin-top: 2px;
+  font-family: var(--mono);
+}
+
+.swipe-row-hint {
+  font-size: 11px;
+  color: var(--border-mid);
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+/* Action panel revealed by swiping left */
+.swipe-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  z-index: 1;
+}
+
+.swipe-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #fff;
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  padding: 0 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.swipe-btn span {
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.swipe-btn-preview  { background: #3366cc; }
+.swipe-btn-link     { background: #5a5acd; }
+.swipe-btn-copy     { background: #339933; }
+.swipe-btn-download { background: #996600; }
+.swipe-btn-delete   { background: #cc3333; }
+
+.swipe-btn:active { filter: brightness(0.85); }
