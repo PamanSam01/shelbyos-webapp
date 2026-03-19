@@ -61,15 +61,7 @@ body {
   }
 }
 
-@media screen and (orientation: portrait) {
-  .layout {
-    grid-template-columns: 1fr;
-    gap: 16px;
-    padding: 16px;
-    max-width: 100%;
-    margin: 0 auto;
-  }
-}
+
 
 @media (max-width: 1440px) and (orientation: landscape) {
   .layout {

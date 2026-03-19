@@ -357,8 +357,8 @@ tbody tr.selected td {
 .mobile-vault-list { display: none; }
 .desktop-vault-table { display: block; }
 
-/* On mobile/portrait: switch to mobile card list */
-@media screen and (max-width: 768px), screen and (orientation: portrait) {
+/* On mobile: switch to mobile card list */
+@media screen and (max-width: 768px) {
   .mobile-vault-list { display: block; margin-top: 8px; }
   .desktop-vault-table { display: none; }
 }
