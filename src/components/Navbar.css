@@ -137,11 +137,26 @@
 
 
 
+@media (max-width: 600px) {
+  .navRight {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .navControl {
+    justify-content: center;
+    width: 100%;
+  }
+  .btn95 {
+    width: 100%;
+  }
+}
+
 @media (max-width: 480px) {
   .navTitle, .navSubtext, .navSep { display: none; }
   .navLogoLink { margin-right: 4px; }
   .navLink { font-size: 12px; padding: 3px; }
   .btn95 { padding: 4px 10px; font-size: 11px; }
-  .navRight { gap: 6px; }
   .navControl { font-size: 11px; }
 }

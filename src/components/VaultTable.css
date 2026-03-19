@@ -358,9 +358,9 @@ tbody tr.selected td {
 .desktop-vault-table { display: block; }
 
 /* On mobile: switch to mobile card list */
-@media screen and (max-width: 768px) {
-  .mobile-vault-list { display: block; margin-top: 8px; }
-  .desktop-vault-table { display: none; }
+@media screen and (max-width: 900px) {
+  .mobile-vault-list { display: block !important; margin-top: 8px; }
+  .desktop-vault-table { display: none !important; }
 }
 
 /* Mobile pagination bar (5 files per page) */
