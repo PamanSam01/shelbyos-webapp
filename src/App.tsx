@@ -13,7 +13,6 @@ import WalletModal from './components/WalletModal'
 import { PermissionModal } from './components/PermissionModal'
 import type { PermissionConfig } from './components/PermissionModal'
 import ConfirmModal from './components/ConfirmModal'
-import FundModal from './components/FundModal'
 import FileDetailModal from './components/FileDetailModal'
 import UploadDetailModal from './components/UploadDetailModal'
 import type { UploadQueueItem } from './components/UploadDetailModal'
@@ -51,7 +50,6 @@ function App() {
   const [isPermModalOpen, setIsPermModalOpen] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
-  const [isFundModalOpen, setIsFundModalOpen] = useState(false)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isUploadDetailModalOpen, setIsUploadDetailModalOpen] = useState(false)
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
@@ -985,14 +983,11 @@ function App() {
             setTheme(newTheme);
             showToast(`Theme switched to ${newTheme.replace('theme-', '').toUpperCase()}`);
           }}
-          onFundAccount={() => {
-            if (!walletConnected) {
-              showToast('Connect wallet first', 'error');
-              setIsWalletModalOpen(true);
-            } else {
-              setIsFundModalOpen(true);
-            }
-          }}
+          walletConnected={walletConnected}
+          address={walletAddress}
+          aptBalance={aptBalance}
+          shelbyBalance={shelbyBalance}
+          onRefresh={handleRefreshBalances}
           onConnectWallet={() => {
             if (walletConnected) {
               handleWalletDisconnect();
@@ -1000,7 +995,6 @@ function App() {
               setIsWalletModalOpen(true);
             }
           }}
-          walletConnected={walletConnected}
         />
         <main className="layout-wrapper">
           <div className="layout">
@@ -1046,14 +1040,14 @@ function App() {
               onUpload={() => setIsUploadDetailModalOpen(true)}
             />
             
-            <div className="window animate-entry delay-3" style={{ marginTop: '10px' }}>
+            <div className="window animate-entry delay-3 action-panel-mobile" style={{ marginTop: '10px' }}>
               <div className="titlebar">
                 <span>🛠️ Actions</span>
               </div>
               <div className="window-body" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <button 
-                  className="btn95" 
-                  style={{ width: '100%', fontSize: '12px' }}
+                  className="btn95 action-mobile-btn" 
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                   onClick={() => {
                     setEditingPermIndex(null);
                     setIsPermModalOpen(true);
@@ -1062,16 +1056,16 @@ function App() {
                   ⚙️ Permission Defaults
                 </button>
                 <button 
-                  className="btn95" 
-                  style={{ width: '100%', fontSize: '12px' }}
+                  className="btn95 action-mobile-btn" 
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                   onClick={() => setIsConfirmClearOpen(true)}
                   disabled={(files?.length || 0) === 0}
                 >
                   🗑️ Clear History
                 </button>
                 <button 
-                  className="btn95" 
-                  style={{ width: '100%', fontSize: '12px' }}
+                  className="btn95 action-mobile-btn" 
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                   onClick={async () => {
                     await fetchVaultHistory();
                     showToast('Vault history refreshed ✓', 'success');
@@ -1154,15 +1148,6 @@ function App() {
           message="Clear all upload history from ShelbyVault?"
           subMessage="This cannot be undone."
           confirmText="Clear All"
-        />
-
-        <FundModal 
-          isOpen={isFundModalOpen}
-          onClose={() => setIsFundModalOpen(false)}
-          address={walletAddress}
-          aptBalance={aptBalance}
-          shelbyBalance={shelbyBalance}
-          onRefresh={handleRefreshBalances}
         />
 
         <FileDetailModal 

@@ -26,18 +26,39 @@ const StatusBar: React.FC<StatusBarProps> = ({
 
   return (
     <div className="statusbar">
-      <span>Files: {fileCount}</span>
-      <span>Size: {totalSize}</span>
-      <span>Wallet: {walletStatus}</span>
-      <span>
-        Network: <span style={{ color: '#00ff00' }}>●</span> {networkStatus}
-      </span>
-      <span>
-        RPC: <span style={{ color: getRpcColor() }}>●</span>
-      </span>
-      <span className="statusbar-credits">
+      <div className="statusbar-item" title="Stored Files">
+        <span className="icon">🗂️</span>
+        <span className="label">Files</span>
+        <span className="value">{fileCount}</span>
+      </div>
+      <div className="statusbar-item" title="Total Vault Size">
+        <span className="icon">💾</span>
+        <span className="label">Size</span>
+        <span className="value">{totalSize}</span>
+      </div>
+      <div className="statusbar-item" title="Wallet Connection">
+        <span className="icon">💼</span>
+        <span className="label">Wallet</span>
+        <span className="value">{walletStatus}</span>
+      </div>
+      <div className="statusbar-item" title="Active Network">
+        <span className="icon">🌐</span>
+        <span className="label">Network</span>
+        <span className="value">{networkStatus}</span>
+      </div>
+      <div className="statusbar-item rpc-item" title="RPC Endpoint Status">
+        <span className="icon">🔌</span>
+        <span className="label">RPC</span>
+        <div className="rpc-indicator">
+          <div className="rpc-dot" style={{ backgroundColor: getRpcColor() }} />
+          <span className="value" style={{ color: getRpcColor(), textTransform: 'capitalize' }}>
+            {rpcStatus}
+          </span>
+        </div>
+      </div>
+      <div className="statusbar-credits">
         Built on <a href="https://x.com/shelbyserves" target="_blank" rel="noopener noreferrer">Shelby</a> | Created by <a href="https://x.com/0xdhyzal" target="_blank" rel="noopener noreferrer">0xSam</a>
-      </span>
+      </div>
     </div>
   );
 };

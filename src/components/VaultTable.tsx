@@ -40,15 +40,46 @@ interface ShelbyVaultTableProps {
 const PAGE_SIZE = 10;
 const MOBILE_PAGE_SIZE = 5;
 
-/** Truncate a long filename for mobile display */
-const truncateName = (name: string, maxLen = 24) =>
-  name.length > maxLen ? name.slice(0, maxLen) + '…' : name;
+/** Smart truncate long filenames for mobile display (preserves extension) */
+const truncateName = (name: string, maxLen = 22) => {
+  if (name.length <= maxLen) return name;
+  
+  const lastDotPos = name.lastIndexOf('.');
+  if (lastDotPos === -1 || lastDotPos === 0 || lastDotPos === name.length - 1) {
+    // No valid extension, fallback to standard truncation
+    return name.slice(0, maxLen - 3) + '...';
+  }
+  
+  const ext = name.slice(lastDotPos);
+  const baseName = name.slice(0, lastDotPos);
+  
+  // How much space do we have for the base name?
+  const availableBaseLen = maxLen - ext.length - 3; // 3 for '...'
+  
+  if (availableBaseLen <= 0) {
+    // Extremely long extension, just do standard truncation
+    return name.slice(0, maxLen - 3) + '...';
+  }
+  
+  // Keep start and end of base name
+  const keepStart = Math.ceil(availableBaseLen / 2);
+  const keepEnd = Math.floor(availableBaseLen / 2);
+  
+  return (
+    <>
+      <span className="file-base">{baseName.slice(0, keepStart)}...{baseName.slice(-keepEnd)}</span>
+      <span className="file-ext">{ext}</span>
+    </>
+  );
+};
 
 /** A single tap-to-expand mobile row with action buttons below */
 const ExpandableRow: React.FC<{
   file: StoredFile;
   checked: boolean;
   onToggle: () => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
   extColor: (ext: string) => string;
   fmtSize: (b: number) => string;
   onPreview?: () => void;
@@ -56,36 +87,36 @@ const ExpandableRow: React.FC<{
   onCopyLink?: () => void;
   onDownload?: () => void;
   onDelete?: () => void;
-}> = ({ file, checked, onToggle, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
-  const [expanded, setExpanded] = useState(false);
-
+}> = ({ file, checked, onToggle, expanded, onToggleExpand, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
   const handleRowClick = () => {
-    setExpanded(prev => !prev);
+    onToggleExpand();
   };
 
   const act = (fn?: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpanded(false);
+    onToggleExpand();
     fn?.();
   };
 
   return (
     <div className={`exp-row-wrapper${expanded ? ' exp-row-open' : ''}`}>
       {/* Main clickable row */}
-      <div className="exp-row-main" onClick={handleRowClick}>
+      <div className="exp-row-main file-row" onClick={handleRowClick}>
         <div className="exp-row-check" onClick={(e) => { e.stopPropagation(); onToggle(); }}>
           <input type="checkbox" checked={checked} onChange={onToggle} readOnly />
         </div>
         <div className="exp-row-info">
           <div className="exp-row-top">
             <span className="ext-icon" style={{ background: extColor(file.ext) }}>{file.ext.slice(0, 2)}</span>
-            <span className="exp-row-name" title={file.name}>{truncateName(file.name, 26)}</span>
+            <div className="exp-row-name" title={file.name}>
+              {truncateName(file.name, 26)}
+            </div>
           </div>
           <div className="exp-row-meta">
             {fmtSize(file.size)}
             {file.status === 'stored'
-              ? <span className="badge-stored"> · STORED</span>
-              : <span className="badge-pending"> · PENDING</span>}
+              ? <span className="badge badge-public">✓ STORED</span>
+              : <span className="badge badge-testnet">⏳ PENDING</span>}
           </div>
         </div>
         <div className="exp-row-chevron">{expanded ? '▲' : '▼'}</div>
@@ -93,12 +124,12 @@ const ExpandableRow: React.FC<{
 
       {/* Expandable action panel */}
       {expanded && (
-        <div className="exp-actions">
-          <button className="exp-btn exp-btn-preview"  onClick={act(onPreview)}>👁<span>Preview</span></button>
-          <button className="exp-btn exp-btn-link"     onClick={act(onOpenExplorer)}>🔗<span>Explorer</span></button>
-          <button className="exp-btn exp-btn-copy"     onClick={act(onCopyLink)}>📋<span>Copy</span></button>
-          <button className="exp-btn exp-btn-download" onClick={act(onDownload)}>⬇<span>Download</span></button>
-          <button className="exp-btn exp-btn-delete"   onClick={act(onDelete)}>🗑<span>Delete</span></button>
+        <div className="inline-action-row">
+          <button className="clean-action-btn action-icon" title="Preview"  onClick={act(onPreview)}>👁</button>
+          <button className="clean-action-btn action-icon" title="Explorer" onClick={act(onOpenExplorer)}>🔗</button>
+          <button className="clean-action-btn action-icon" title="Copy"     onClick={act(onCopyLink)}>📋</button>
+          <button className="clean-action-btn action-icon" title="Download" onClick={act(onDownload)}>⬇</button>
+          <button className="clean-action-btn action-icon" title="Delete"   onClick={act(onDelete)}>🗑</button>
         </div>
       )}
     </div>
@@ -124,6 +155,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
   const [searchQuery, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [internalCheckedIds, setInternalCheckedIds] = useState<Set<number>>(new Set());
+  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
   
   const checkedIds = propsCheckedIds || internalCheckedIds;
   const setCheckedIds = (ids: Set<number>) => {
@@ -234,7 +266,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
         </div>
 
         {/* ─── MOBILE EXPANDABLE CARD LIST (shown only on mobile via CSS, 5 per page) ─── */}
-        <div className="mobile-vault-list">
+        <div className="mobile-vault-list mobile-layout">
           {emptyState}
           {!emptyState && mobilePageFiles.map(s => (
             <ExpandableRow
@@ -242,6 +274,8 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               file={s}
               checked={checkedIds.has(s.id)}
               onToggle={() => toggleCheck(s.id)}
+              expanded={expandedRowId === s.id}
+              onToggleExpand={() => setExpandedRowId(expandedRowId === s.id ? null : s.id)}
               extColor={extColor}
               fmtSize={fmtSize}
               onPreview={() => onPreview?.(s.id)}
@@ -281,7 +315,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
         </div>
 
         {/* ─── DESKTOP TABLE (hidden on mobile via CSS) ─── */}
-        <div className="table-wrap desktop-vault-table">
+        <div className="table-wrap desktop-vault-table desktop-layout">
           {emptyState || (
             <table>
               <thead>
@@ -298,34 +332,34 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               <tbody>
                 {pageFiles.map(s => {
                   const permType = (s.permConfig && s.permConfig.type) || (s.vis === 'public' ? 'public' : s.vis === 'private' ? 'allowlist' : 'purchasable');
-                  const permMeta: Record<string, [string, string, string]> = {
-                    public: ['🌐', 'Public', 'perm-public'],
-                    allowlist: ['📋', 'Allowlist', 'perm-allowlist'],
-                    timelock: ['⏰', 'Time Lock', 'perm-timelock'],
-                    purchasable: ['💰', 'Purchasable', 'perm-purchasable'],
+                  const permMeta: Record<string, [string, string]> = {
+                    public: ['🌐', 'Public'],
+                    allowlist: ['📋', 'Allowlist'],
+                    timelock: ['⏰', 'Time Lock'],
+                    purchasable: ['💰', 'Purchasable'],
                   };
-                  const [pIcon, pLabel, pClass] = permMeta[permType] || permMeta.public;
+                  const [pIcon, pLabel] = permMeta[permType] || permMeta.public;
                   return (
-                    <tr key={s.id} className={checkedIds.has(s.id) ? 'selected' : ''} onClick={() => toggleCheck(s.id)}>
+                    <tr key={s.id} className={`file-row ${checkedIds.has(s.id) ? 'selected' : ''}`} onClick={() => toggleCheck(s.id)}>
                       <td><input type="checkbox" checked={checkedIds.has(s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleCheck(s.id)} /></td>
                       <td>
                         <span className="ext-icon" style={{ background: extColor(s.ext) }}>{s.ext.slice(0, 2)}</span>
                         {s.name}
-                        {s.vis === 'public' && s.status === 'stored' && <span className="hot-badge">HOT</span>}
-                        <span className={`perm-pill interactive ${pClass}`} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
-                        {s.network && <span style={{ fontSize: '8px', padding: '1px 4px', background: 'var(--panel)', border: '1px solid var(--border-mid)', marginLeft: '3px', whiteSpace: 'nowrap' }}>{s.network}</span>}
+                        {s.vis === 'public' && s.status === 'stored' && <span className="badge badge-hot" style={{ marginLeft: '8px' }}>🔥 HOT</span>}
+                        <span className={`badge badge-public interactive`} style={{ marginLeft: '6px', cursor: 'pointer' }} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
+                        {s.network && <span className="badge badge-testnet" style={{ marginLeft: '6px' }}>{s.network}</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)' }}>{fmtSize(s.size)}</td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '12px' }}>{s.date || ''} {s.time || ''}</td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s.uploader || ''}>{shortenAddr(s.uploader || '')}</td>
-                      <td><span className={s.status === 'stored' ? 'badge-stored' : 'badge-pending'}>{s.status.toUpperCase()}</span></td>
+                      <td><span className={s.status === 'stored' ? 'badge badge-public' : 'badge badge-testnet'}>{s.status.toUpperCase()}</span></td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button><span className="tiptext">Preview file</span></span>
-                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button><span className="tiptext">Open in Shelby Explorer</span></span>
-                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onCopyLink?.(s.id); }}>📋</button><span className="tiptext">Copy explorer link</span></span>
-                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button><span className="tiptext">Download file</span></span>
-                        <span className="tip"><button className="icon-btn95" onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>🔒</button><span className="tiptext">Manage Permissions</span></span>
-                        <span className="tip"><button className="icon-btn95 del" onClick={(e) => { e.stopPropagation(); onDelete?.(s.id); }}>DEL</button><span className="tiptext">Delete from vault</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button><span className="tiptext">Preview file</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button><span className="tiptext">Open in Shelby Explorer</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onCopyLink?.(s.id); }}>📋</button><span className="tiptext">Copy explorer link</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button><span className="tiptext">Download file</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>🔒</button><span className="tiptext">Manage Permissions</span></span>
+                        <span className="tip"><button className="icon-btn95 action-icon del" onClick={(e) => { e.stopPropagation(); onDelete?.(s.id); }}>DEL</button><span className="tiptext">Delete from vault</span></span>
                       </td>
                     </tr>
                   );
@@ -337,7 +371,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
 
         {/* Pagination bar */}
         {filteredFiles.length > PAGE_SIZE && (
-          <div className="pagination-bar">
+          <div className="pagination-bar desktop-layout">
             <button className="page-btn95" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} title="Previous page">◀</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
               <button key={pg} className={`page-btn95${safePage === pg ? ' page-active' : ''}`} onClick={() => setCurrentPage(pg)} title={`Page ${pg}`}>{pg}</button>
@@ -348,7 +382,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
         )}
 
         {filteredFiles.length <= PAGE_SIZE && (
-          <div style={{ marginTop: '5px', textAlign: 'right' }}>
+          <div className="desktop-layout" style={{ marginTop: '5px', textAlign: 'right' }}>
             <span style={{ fontSize: '12px', color: 'var(--border-mid)' }}>
               {filteredFiles.length > 0 && `${filteredFiles.length} file${filteredFiles.length !== 1 ? 's' : ''}`}
             </span>

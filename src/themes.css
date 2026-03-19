@@ -16,14 +16,21 @@ body.theme-xp {
   --accent: #316ac5;
   --hot: #cc0000;
   --selected: #c1d2ee;
+  --label-opacity: 0.6;
+  --radius-sm: 2px;
+  --radius-md: 4px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cdefs%3E%3CradialGradient id='a' cx='50%25' cy='40%25' r='70%25'%3E%3Cstop offset='0' stop-color='%235b8dce'/%3E%3Cstop offset='1' stop-color='%23235ba8'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='400' height='400' fill='url(%23a)'/%3E%3C/svg%3E");
   background-size: cover;
 }
 
 body.theme-xp .window {
-  border: 3px solid rgba(0, 60, 116, 0.85);
+  border: 2px solid #a0a0a0;
   border-radius: 6px 6px 0 0;
-  box-shadow: 2px 4px 12px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(166, 202, 240, 0.6);
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.35),
+    0 1px 3px rgba(0,0,0,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.9),
+    inset 0 0 0 1px rgba(166, 202, 240, 0.5);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -42,38 +49,60 @@ body.theme-xp nav {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* XP button hover — clear 3D lift with shadow */
+body.theme-xp button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+}
+
 body.theme-xp .statusbar {
-  background: linear-gradient(180deg, rgba(236, 233, 216, 0.9) 0%, rgba(216, 212, 192, 0.9) 100%);
-  border-top: 2px solid rgba(122, 150, 184, 0.8);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, #ece9d8 0%, #d8d4c0 100%);
+  border-top: 1px solid #ffffff;
+  box-shadow: 0 -1px 0 #a0a0a0;
+  color: #111;
+}
+
+body.theme-xp .statusbar-item {
+  border-right: 1px solid #ffffff;
+  box-shadow: 1px 0 0 #a0a0a0;
+}
+body.theme-xp .statusbar-item:last-of-type {
+  border-right: none;
+  box-shadow: none;
+}
+body.theme-xp .statusbar-item:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #eae7d8 100%);
 }
 
 /* ════════════════════════════════════════════════
    THEME: Terminal (Matrix)
    ════════════════════════════════════════════════ */
 body.theme-terminal {
-  --bg: #0d0d0d;
+  --bg: #080808; /* slightly softer than harsh black */
   --panel: rgba(17, 17, 17, 0.85);
   --titlebar: rgba(13, 13, 13, 0.9);
   --titlebar2: rgba(13, 13, 13, 0.9);
-  --text: #00ff41;
+  --text: #4ade80;
   --border-light: #1a3a1a;
   --border-dark: #001a00;
   --border-mid: #005500;
-  --input-bg: #000000;
-  --accent: #00ff41;
-  --hot: #ff4444;
-  --selected: #001a00;
+  --input-bg: #050505;
+  --accent: #4ade80;
+  --hot: #ef4444; /* softened red */
+  --selected: #002200;
+  --label-opacity: 0.65;
+  --radius-sm: 0px;
+  --radius-md: 0px;
   font-family: 'Courier New', monospace;
   background-image: none;
-  background-color: #0d0d0d;
+  background-color: #080808;
 }
 
 body.theme-terminal .window {
-  border: 1px solid rgba(0, 85, 0, 0.8);
+  border: 1px solid rgba(0, 255, 0, 0.7);
   border-radius: 0;
-  box-shadow: 0 0 12px rgba(0,255,65,0.2);
+  box-shadow: 0 0 20px rgba(0,255,65,0.15), 0 2px 12px rgba(0,0,0,0.8);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -93,27 +122,36 @@ body.theme-terminal .titlebar > span:first-child::before {
 
 body.theme-terminal nav {
   background: #0d0d0d;
-  border-bottom: 1px solid #005500;
+  border-bottom: 1px solid rgba(0, 255, 0, 0.7);
 }
 
 body.theme-terminal .btn95 {
   background: #000000;
-  border: 1px solid #005500;
+  border: 1px solid rgba(0, 255, 0, 0.7);
   color: #00ff41;
   border-radius: 0;
+}
+
+/* Terminal button hover — bright green inversion */
+body.theme-terminal button:hover:not(:disabled) {
+  filter: none;
+  background: rgba(0, 255, 65, 0.15) !important;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.4), inset 0 0 0 1px rgba(0,255,65,0.5);
+  transform: none;
+  color: #00ff41;
 }
 
 body.theme-terminal .input95,
 body.theme-terminal .select95 {
   background: #000;
-  border: 1px solid #005500;
+  border: 1px solid rgba(0, 255, 0, 0.7);
   color: #00ff41;
 }
 
 body.theme-terminal .statusbar {
-  background: #0d0d0d;
-  border-top: 1px solid #005500;
-  color: #00aa22;
+  background: #000;
+  border-top: 1px solid rgba(0, 255, 0, 0.7);
+  color: #00ff41;
 }
 
 /* ════════════════════════════════════════════════
@@ -124,7 +162,7 @@ body.theme-neon {
   --panel: #0e0e1e;
   --titlebar: #1a0050;
   --titlebar2: #2d0080;
-  --text: #e8e0ff;
+  --text: rgba(196,181,253,0.9);
   --border-light: #7c3aed;
   --border-dark: #1a0050;
   --border-mid: #4c1d95;
@@ -132,14 +170,20 @@ body.theme-neon {
   --accent: #22d3ee;
   --hot: #f43f5e;
   --selected: #1a0050;
+  --label-opacity: 0.65;
+  --radius-sm: 6px;
+  --radius-md: 8px;
   background-image: none;
   background-color: #050510;
 }
 
 body.theme-neon .window {
-  border: 1px solid #7c3aed;
-  border-radius: 4px;
-  box-shadow: 0 0 12px rgba(124,58,237,0.4), inset 0 0 0 1px rgba(124,58,237,0.1);
+  border: 1px solid rgba(124, 58, 237, 0.6);
+  border-radius: 8px;
+  box-shadow:
+    0 0 24px rgba(124,58,237,0.2),
+    0 4px 20px rgba(0,0,0,0.6),
+    inset 0 0 0 1px rgba(124,58,237,0.12);
 }
 
 body.theme-neon .titlebar {
@@ -150,20 +194,28 @@ body.theme-neon .titlebar {
 }
 
 body.theme-neon nav {
-  background: #0a0a1a;
-  border-bottom: 1px solid #7c3aed;
-  box-shadow: 0 2px 16px rgba(124,58,237,0.3);
+  background: linear-gradient(180deg, #0d0d20 0%, #0a0a1a 100%);
+  border-bottom: 1px solid rgba(124, 58, 237, 0.6);
+  box-shadow: 0 2px 20px rgba(124,58,237,0.2);
 }
 
 body.theme-neon .btn95 {
-  background: #0e0e1e;
-  border: 1px solid #7c3aed;
-  color: #a78bfa;
+  background: linear-gradient(135deg, #150035 0%, #0e0e1e 100%);
+  border: 1px solid rgba(124, 58, 237, 0.6);
+  color: #c4b5fd;
+  border-radius: 6px;
+}
+
+/* Neon button hover — vivid purple glow lift */
+body.theme-neon button:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5), 0 0 8px rgba(124, 58, 237, 0.3);
 }
 
 body.theme-neon .statusbar {
-  background: #0a0a1a;
-  border-top: 1px solid #4c1d95;
+  background: linear-gradient(180deg, #0d0d20 0%, #0a0a1a 100%);
+  border-top: 1px solid rgba(76, 29, 149, 0.8);
   color: #a78bfa;
 }
 
@@ -176,4 +228,661 @@ body.theme-neon .progress95-bar {
 @keyframes neonSlide {
   0% { background-position: 0% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* ════════════════════════════════════════════════
+   THEME OVERRIDES FOR MODALS & DROPDOWNS
+   ════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────
+   XP THEME — Refined Classic Window
+───────────────────────────────────────────────── */
+body.theme-xp .modern-wallet-modal,
+body.theme-xp .fund-dropdown-panel {
+  background: linear-gradient(180deg, #f0ede0 0%, #dcd8c8 100%);
+  border-top:    2px solid #f8f8f8;
+  border-left:   2px solid #f8f8f8;
+  border-right:  2px solid #9a9a9a;
+  border-bottom: 2px solid #9a9a9a;
+  border-radius: 0;
+  color: #1a1a1a;
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.28),
+    0 2px 6px rgba(0,0,0,0.15),
+    inset 1px 1px 0 rgba(255,255,255,0.85);
+}
+
+/* Titlebar */
+body.theme-xp .modern-wallet-header {
+  background: linear-gradient(180deg, #5890d8 0%, #2a60c8 12%, #1a4aaa 50%, #1238a0 88%, #0a246a 100%);
+  padding: 7px 12px;
+  margin: 0;
+  border-bottom: 2px solid #0a246a;
+}
+body.theme-xp .modern-wallet-header h3 {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+body.theme-xp .modern-wallet-close {
+  color: #fff;
+  background: linear-gradient(180deg, #e84030 0%, #c01808 100%);
+  border-top:    1px solid #ff9890;
+  border-left:   1px solid #ff9890;
+  border-right:  1px solid #900000;
+  border-bottom: 1px solid #900000;
+  border-radius: 1px;
+  font-size: 9px;
+  font-weight: 900;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  letter-spacing: 0;
+}
+body.theme-xp .modern-wallet-close:hover {
+  background: linear-gradient(180deg, #ff6050 0%, #e01818 100%);
+  transform: none;
+  filter: none;
+}
+
+/* Inner panels — warm white with soft sunken border */
+body.theme-xp .modern-wallet-item,
+body.theme-xp .modern-fund-address,
+body.theme-xp .modern-fund-balance {
+  background: #faf8f2;
+  border-top:    1px solid #9a9a9a;
+  border-left:   1px solid #9a9a9a;
+  border-right:  1px solid #e8e8e8;
+  border-bottom: 1px solid #e8e8e8;
+  border-radius: 0;
+  color: #111;
+}
+body.theme-xp .modern-wallet-item {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #d0c8b4;
+}
+body.theme-xp .modern-wallet-item:hover { background: #d8eafc; }
+body.theme-xp .modern-fund-address:hover { background: #eef4ff; }
+
+/* XP bevel buttons — refined */
+body.theme-xp .modern-wallet-connect-btn,
+body.theme-xp .modern-fund-btn {
+  background: linear-gradient(180deg, #f4f1e8 0%, #dcd8cc 100%);
+  border-top:    2px solid #f8f8f8;
+  border-left:   2px solid #f8f8f8;
+  border-right:  2px solid #606060;
+  border-bottom: 2px solid #606060;
+  border-radius: 0;
+  color: #1a1a1a;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.9);
+  font-family: 'Tahoma', 'Segoe UI', sans-serif;
+  font-size: 11px;
+  padding: 4px 14px;
+}
+body.theme-xp .modern-wallet-connect-btn:hover:not(:disabled),
+body.theme-xp .modern-fund-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff 0%, #e8e4d8 100%);
+  filter: none;
+  transform: none;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.9), 0 2px 6px rgba(0,0,0,0.18);
+}
+body.theme-xp .modern-wallet-connect-btn:active,
+body.theme-xp .modern-fund-btn:active {
+  background: #ccc8be;
+  border-top:    2px solid #606060;
+  border-left:   2px solid #606060;
+  border-right:  2px solid #f8f8f8;
+  border-bottom: 2px solid #f8f8f8;
+  transform: none;
+  box-shadow: inset 1px 1px 0 rgba(0,0,0,0.1);
+}
+
+/* XP typography */
+body.theme-xp .address-label,
+body.theme-xp .balance-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+body.theme-xp .address-value {
+  color: #111;
+  font-size: 11px;
+  font-weight: 500;
+}
+body.theme-xp .balance-amount {
+  color: #1a3a8a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ─────────────────────────────────────────────────
+   NEON THEME — Controlled Glow Panel
+───────────────────────────────────────────────── */
+body.theme-neon .modern-wallet-modal,
+body.theme-neon .fund-dropdown-panel {
+  background: linear-gradient(160deg, #0e0e24 0%, #0a0a1a 100%);
+  border: 1px solid rgba(124, 58, 237, 0.55);
+  border-radius: 8px;
+  color: #e8e0ff;
+  box-shadow:
+    0 0 0 1px rgba(124,58,237,0.12),
+    0 0 16px rgba(124,58,237,0.22),
+    0 8px 28px rgba(0,0,0,0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Header bar */
+body.theme-neon .modern-wallet-header {
+  background: linear-gradient(90deg, #1e0060 0%, #4c1d95 60%, #1e3a8a 100%);
+  border-bottom: 1px solid rgba(124,58,237,0.4);
+  padding: 8px 14px;
+  margin: 0;
+}
+body.theme-neon .modern-wallet-header h3 {
+  color: #ddd6fe;
+  font-size: 13px;
+  text-shadow: 0 0 8px rgba(167,139,250,0.5);
+  letter-spacing: 0.02em;
+}
+body.theme-neon .modern-wallet-close {
+  color: rgba(167,139,250,0.7);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+body.theme-neon .modern-wallet-close:hover {
+  background: rgba(124,58,237,0.25);
+  color: #c4b5fd;
+  filter: none;
+  transform: none;
+}
+
+/* Inner panels */
+body.theme-neon .modern-wallet-item,
+body.theme-neon .modern-fund-address,
+body.theme-neon .modern-fund-balance {
+  background: rgba(255,255,255,0.024);
+  border: 1px solid rgba(124,58,237,0.22);
+  border-radius: 6px;
+  color: #e8e0ff;
+}
+body.theme-neon .modern-wallet-item {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(124,58,237,0.15);
+  border-radius: 0;
+  padding: 8px 12px;
+}
+body.theme-neon .modern-wallet-item:hover {
+  background: rgba(124,58,237,0.1);
+}
+body.theme-neon .modern-fund-address:hover,
+body.theme-neon .modern-fund-balance:hover {
+  background: rgba(124,58,237,0.1);
+  border-color: rgba(124,58,237,0.45);
+}
+
+/* Neon buttons — outline style */
+body.theme-neon .modern-wallet-connect-btn,
+body.theme-neon .modern-fund-btn {
+  background: transparent;
+  border: 1px solid rgba(124,58,237,0.55);
+  color: #c4b5fd;
+  border-radius: 6px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  padding: 5px 14px;
+}
+body.theme-neon .modern-wallet-connect-btn:hover:not(:disabled),
+body.theme-neon .modern-fund-btn:hover:not(:disabled) {
+  background: rgba(124,58,237,0.18);
+  border-color: rgba(124,58,237,0.8);
+  color: #ddd6fe;
+  box-shadow: 0 0 10px rgba(124,58,237,0.3);
+  transform: translateY(-1px);
+  filter: none;
+}
+body.theme-neon .modern-wallet-connect-btn:active,
+body.theme-neon .modern-fund-btn:active {
+  background: rgba(124,58,237,0.25);
+  transform: none;
+}
+
+/* Neon typography */
+body.theme-neon .address-label,
+body.theme-neon .balance-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(167,139,250,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+body.theme-neon .address-value {
+  color: #c4b5fd;
+  font-size: 12px;
+}
+body.theme-neon .balance-amount {
+  color: #38bdf8;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ─────────────────────────────────────────────────
+   TERMINAL THEME — Sharp Minimal
+───────────────────────────────────────────────── */
+body.theme-terminal .modern-wallet-modal,
+body.theme-terminal .fund-dropdown-panel {
+  background: #020202;
+  border: 1px solid rgba(0,255,65,0.7);
+  border-radius: 0;
+  box-shadow: 0 0 12px rgba(0,255,65,0.12), 0 4px 16px rgba(0,0,0,0.9);
+  font-family: 'Courier New', Courier, monospace;
+  color: #00ff41;
+}
+
+/* Terminal header bar */
+body.theme-terminal .modern-wallet-header {
+  background: #000;
+  border-bottom: 1px solid rgba(0,255,65,0.5);
+  padding: 6px 12px;
+  margin: 0;
+}
+body.theme-terminal .modern-wallet-header h3 {
+  color: #00ff41;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: normal;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+body.theme-terminal .modern-wallet-header h3::before { content: '> '; opacity: 0.5; }
+body.theme-terminal .modern-wallet-close {
+  color: rgba(0,255,65,0.6);
+  border: 1px solid rgba(0,255,65,0.3);
+  border-radius: 0;
+  font-size: 10px;
+  width: 18px;
+  height: 16px;
+  padding: 0;
+}
+body.theme-terminal .modern-wallet-close:hover {
+  border-color: #00ff41;
+  color: #00ff41;
+  background: transparent;
+  box-shadow: 0 0 4px rgba(0,255,65,0.3);
+  filter: none;
+  transform: none;
+}
+
+/* Inner panels — slightly lighter than pure black */
+body.theme-terminal .modern-wallet-item,
+body.theme-terminal .modern-fund-address,
+body.theme-terminal .modern-fund-balance {
+  background: #0a0a0a;
+  border: 1px solid rgba(0,255,65,0.2);
+  border-radius: 0;
+  color: #00ff41;
+}
+body.theme-terminal .modern-wallet-item {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(0,255,65,0.15);
+  padding: 8px 12px;
+}
+body.theme-terminal .modern-wallet-item:hover {
+  background: rgba(0,255,65,0.05);
+  border-bottom-color: rgba(0,255,65,0.4);
+}
+body.theme-terminal .modern-fund-address:hover {
+  background: #081008;
+  border-color: rgba(0,255,65,0.5);
+}
+
+/* Terminal wallet name */
+body.theme-terminal .modern-wallet-name {
+  color: #00ff41;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+/* Terminal buttons — outline, no shadow */
+body.theme-terminal .modern-wallet-connect-btn,
+body.theme-terminal .modern-fund-btn {
+  background: transparent;
+  border: 1px solid rgba(0,255,65,0.6);
+  border-radius: 0;
+  color: #00ff41;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 4px 12px;
+}
+body.theme-terminal .modern-wallet-connect-btn:hover:not(:disabled),
+body.theme-terminal .modern-fund-btn:hover:not(:disabled) {
+  background: rgba(0,255,65,0.1);
+  border-color: #00ff41;
+  box-shadow: 0 0 6px rgba(0,255,65,0.2);
+  filter: none;
+  transform: none;
+}
+body.theme-terminal .modern-wallet-connect-btn:active,
+body.theme-terminal .modern-fund-btn:active {
+  background: rgba(0,255,65,0.2);
+}
+
+/* Terminal typography */
+body.theme-terminal .address-label,
+body.theme-terminal .balance-header {
+  font-size: 10px;
+  color: rgba(0,200,50,0.6);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: normal;
+}
+body.theme-terminal .address-value {
+  color: #00ff41;
+  font-size: 11px;
+}
+body.theme-terminal .balance-amount {
+  color: #00ff41;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+body.theme-terminal .address-value,
+body.theme-terminal .balance-amount {
+  color: #00ff00;
+}
+
+body.theme-terminal .apt-badge,
+body.theme-terminal .susd-badge {
+  background: #000;
+  color: #00ff00;
+  border: 1px solid #00ff00;
+}
+
+/* ════════════════════════════════════════════════
+   LAYER SEPARATION & TABLE IMPROVEMENTS
+   ════════════════════════════════════════════════ */
+
+/* ── XP: clear gradient panels, classic blue hover ── */
+body.theme-xp .window {
+  background: linear-gradient(180deg, #ece9d8 0%, #ddd8c0 100%);
+}
+body.theme-xp .window-body {
+  background: linear-gradient(180deg, #f4f1e8 0%, #e8e4d0 100%);
+}
+body.theme-xp thead tr,
+body.theme-xp th {
+  background: linear-gradient(180deg, #dcd8c4 0%, #ccc8b4 100%);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #333;
+}
+body.theme-xp tbody td {
+  border-bottom: 1px solid #d4d0c8;
+}
+body.theme-xp .file-row.selected {
+  background: #316ac5 !important;
+  color: #fff;
+}
+body.theme-xp .file-row.selected td {
+  color: #fff;
+}
+/* XP typography hierarchy */
+body.theme-xp .address-label,
+body.theme-xp .balance-header {
+  font-size: 11px;
+  opacity: 0.65;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+body.theme-xp .address-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: #222;
+}
+body.theme-xp .balance-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a3a8a;
+}
+
+/* ── Neon: dark gradient panels, purple glow hover ── */
+body.theme-neon .window {
+  background: linear-gradient(180deg, #0f0f22 0%, #0a0a18 100%);
+}
+body.theme-neon .window-body {
+  background: linear-gradient(180deg, #12122a 0%, #0e0e20 100%);
+}
+body.theme-neon thead tr,
+body.theme-neon th {
+  background: linear-gradient(180deg, #1a1a38 0%, #14143a 100%);
+  color: #a78bfa;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(124,58,237,0.4);
+}
+body.theme-neon tbody td {
+  border-bottom: 1px solid rgba(124, 58, 237, 0.2);
+}
+body.theme-neon .file-row:hover {
+  background: rgba(124, 58, 237, 0.08) !important;
+}
+body.theme-neon .file-row.selected {
+  background: rgba(124, 58, 237, 0.2) !important;
+}
+/* Neon typography hierarchy */
+body.theme-neon .address-label,
+body.theme-neon .balance-header {
+  font-size: 11px;
+  color: #7c3aed;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+body.theme-neon .address-value {
+  font-size: 12px;
+  color: #c4b5fd;
+  font-weight: 500;
+}
+body.theme-neon .balance-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #22d3ee;
+}
+
+/* ── Terminal: pure black panels, green borders ── */
+body.theme-terminal .window {
+  background: #000;
+}
+body.theme-terminal .window-body {
+  background: #000;
+}
+body.theme-terminal thead tr,
+body.theme-terminal th {
+  background: #000;
+  color: #00aa22;
+  font-size: 11px;
+  font-weight: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(0,255,65,0.4);
+}
+body.theme-terminal tbody td {
+  border-bottom: 1px dashed rgba(0, 85, 0, 0.5);
+}
+body.theme-terminal .file-row:hover {
+  background: rgba(74, 222, 128, 0.08) !important;
+}
+body.theme-terminal .file-row.selected {
+  background: rgba(0, 255, 0, 0.1) !important;
+  color: #00ff41;
+}
+/* Terminal typography hierarchy */
+body.theme-terminal .address-label,
+body.theme-terminal .balance-header {
+  font-size: 11px;
+  color: #00aa22;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+body.theme-terminal .address-value {
+  font-size: 12px;
+  color: #00ff41;
+  font-weight: normal;
+}
+body.theme-terminal .balance-amount {
+  font-size: 16px;
+  font-weight: bold;
+  color: #00ff41;
+}
+
+/* ════════════════════════════════════════════════
+   THEME OVERRIDES FOR BADGE SYSTEM
+   ════════════════════════════════════════════════ */
+
+/* ── XP: Classic Solid Badges ── */
+body.theme-xp .badge {
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.4);
+}
+body.theme-xp .badge-hot {
+  background: #d82810;
+  border: 1px solid #901000;
+  color: #ffffff;
+}
+body.theme-xp .badge-public {
+  background: #e0dccc;
+  border: 1px solid #a0a0a0;
+  color: #222;
+}
+body.theme-xp .badge-testnet {
+  background: transparent;
+  border: 1px solid #b0b0b0;
+  color: #666;
+}
+
+/* ── Neon: Glowing Floating Badges ── */
+body.theme-neon .badge {
+  border-radius: 4px;
+}
+body.theme-neon .badge-hot {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.8);
+  color: #fca5a5;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.4);
+}
+body.theme-neon .badge-public {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #7dd3fc;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+body.theme-neon .badge-testnet {
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  color: rgba(196, 181, 253, 0.8);
+}
+
+/* ── Terminal: Sharp Minimal Badges ── */
+body.theme-terminal .badge {
+  border-radius: 0;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em;
+  font-weight: normal;
+}
+body.theme-terminal .badge-hot {
+  background: #000;
+  border: 1px solid #ff0000;
+  color: #ff0000;
+  box-shadow: 0 0 4px rgba(255,0,0,0.4);
+}
+body.theme-terminal .badge-public {
+  background: #000;
+  border: 1px solid #00ff41;
+  color: #00ff41;
+}
+body.theme-terminal .badge-testnet {
+  background: transparent;
+  border: 1px dashed rgba(0, 255, 65, 0.6);
+  color: rgba(0, 255, 65, 0.8);
+}
+
+/* ════════════════════════════════════════════════
+   THEME OVERRIDES FOR STATUSBAR (NEW LAYOUT)
+   ════════════════════════════════════════════════ */
+
+/* ── Neon: Glowing Floating Statusbar ── */
+body.theme-neon .statusbar {
+  background: #080816;
+  border-top: 1px solid rgba(124, 58, 237, 0.4);
+  color: #c4b5fd;
+}
+body.theme-neon .statusbar-item {
+  border-right: 1px solid rgba(124, 58, 237, 0.2);
+}
+body.theme-neon .statusbar-item:last-of-type {
+  border-right: none;
+}
+body.theme-neon .statusbar-item:hover {
+  background: rgba(124, 58, 237, 0.15);
+}
+body.theme-neon .statusbar .icon {
+  color: #ddd6fe;
+  opacity: 0.9;
+}
+body.theme-neon .statusbar .label {
+  color: rgba(167,139,250,0.7);
+}
+body.theme-neon .statusbar .value {
+  color: #e8e0ff;
+}
+/* Neon precise RPC indicator glow */
+body.theme-neon .rpc-dot {
+  box-shadow: 0 0 8px currentColor, 0 0 12px currentColor;
+}
+
+/* ── Terminal: Sharp Minimal Statusbar ── */
+body.theme-terminal .statusbar {
+  background: #000000;
+  border-top: 1px solid #005500;
+  color: #00aa00;
+}
+body.theme-terminal .statusbar-item {
+  border-right: 1px solid #005500;
+}
+body.theme-terminal .statusbar-item:last-of-type {
+  border-right: none;
+}
+body.theme-terminal .statusbar-item:hover {
+  background: #001a00;
+  color: #00ff00;
+}
+body.theme-terminal .statusbar .icon {
+  color: #00ff00;
+  opacity: 1;
+}
+body.theme-terminal .statusbar .label {
+  color: #008800;
+}
+body.theme-terminal .statusbar .value {
+  color: #00ff00;
+}
+body.theme-terminal .rpc-dot {
+  box-shadow: 0 0 4px currentColor;
+  border-radius: 0; /* Terminal is sharp */
+}
+body.theme-terminal .rpc-dot::after {
+  border-radius: 0;
 }

@@ -124,7 +124,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({
         <div style={{ display: 'flex', gap: '5px' }}>
           <button 
             className="btn95 primary" 
-            style={{ flex: 2 }} 
+            style={{ flex: 2, padding: '8px 10px' }} 
             onClick={onUpload}
             disabled={!walletConnected || queuedFiles.length === 0 || isUploading}
           >

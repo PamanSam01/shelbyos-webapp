@@ -6,6 +6,43 @@
   --hot: #cc0000;
 }
 
+/* ─────────────────────────────────────────────────
+   GLOBAL BADGE SYSTEM
+───────────────────────────────────────────────── */
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 600;
+  border: 1px solid;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Base variants — overridden by themes.css */
+.badge-hot {
+  background: #cc0000;
+  color: #fff;
+  border-color: #aa0000;
+}
+.badge-public {
+  background: #0088cc;
+  color: #fff;
+  border-color: #006699;
+}
+.badge-testnet {
+  background: #e0e0e0;
+  color: #555;
+  border-color: #ccc;
+  font-size: 9px;
+  padding: 1px 4px;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -97,12 +134,64 @@ body {
 .delay-2 { animation-delay: 0.2s; }
 .delay-3 { animation-delay: 0.3s; }
 
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown, .modal, .panel, .modern-dropdown, .modern-wallet-modal, .fund-dropdown-panel {
+  animation: fadeSlide 0.15s ease;
+}
+
 button {
-  transition: filter 0.2s ease, transform 0.1s ease;
+  transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
 }
+
 button:hover:not(:disabled) {
-  filter: brightness(1.1);
+  transform: translateY(-1px);
+  filter: brightness(1.05);
 }
+
 button:active:not(:disabled) {
   transform: translateY(1px);
+  box-shadow: inset 1px 1px 3px rgba(0,0,0,0.25);
+  filter: brightness(1);
+}
+
+/* ─────────────────────────────────────────────────
+   GLOBAL MICRO-INTERACTIONS & FEEDBACK
+───────────────────────────────────────────────── */
+.file-row {
+  transition: background 0.12s ease;
+}
+
+.file-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.action-icon {
+  transition: all 0.15s ease !important;
+}
+
+.action-icon:hover {
+  transform: scale(1.1) !important;
+  opacity: 1 !important;
+}
+
+.success {
+  animation: pulse 0.3s ease;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
 }

@@ -204,6 +204,11 @@ tbody tr.selected td {
   color: var(--border-mid);
   font-size: 13px;
   line-height: 2;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .empty-icon {
@@ -390,11 +395,30 @@ tbody tr.selected td {
 }
 
 .exp-row-name {
-  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
-  font-size: 13px;
-  white-space: nowrap;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  font-size: clamp(11px, 2.8vw, 13px); /* Responsive font scaling */
+  display: flex;
+  align-items: center;
+  max-width: clamp(140px, 45vw, 240px); /* Adaptive width */
+}
+
+/* Base name truncates if space is tight */
+.exp-row-name .file-base {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Extension stays glued to the end and never shrinks */
+.exp-row-name .file-ext {
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: 0.65;
+  font-size: 0.95em;
+  font-weight: 500;
+  margin-left: 1px;
 }
 
 .exp-row-meta {
@@ -412,11 +436,19 @@ tbody tr.selected td {
 }
 
 /* Action buttons bar that appears below the row */
-.exp-actions {
-  display: flex;
-  width: 100%;
+.inline-action-row {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 10px !important;
+  width: 100% !important;
   border-top: 1px solid var(--border-mid);
-  animation: expSlideDown 0.18s ease;
+  background: transparent;
+  animation: expSlideDown 0.2s ease;
+  flex-wrap: nowrap !important;
+  box-sizing: border-box !important;
 }
 
 @keyframes expSlideDown {
@@ -424,39 +456,33 @@ tbody tr.selected td {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.exp-btn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 10px 4px;
-  border: none;
-  border-right: 1px solid rgba(255,255,255,0.15);
-  cursor: pointer;
-  font-size: 18px;
-  color: #fff;
-  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
-  -webkit-tap-highlight-color: transparent;
+.clean-action-btn {
+  all: unset !important;
+  cursor: pointer !important;
+  font-size: 19px !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 7px !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  background: none !important;
+  border: none !important;
+  width: auto !important;
+  height: auto !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
-.exp-btn:last-child { border-right: none; }
-
-.exp-btn span {
-  font-size: 9px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  font-weight: 700;
+.clean-action-btn:hover {
+  transform: scale(1.15) !important;
+  opacity: 0.8 !important;
 }
 
-.exp-btn:active { filter: brightness(0.82); }
+.clean-action-btn:active {
+  transform: scale(0.95) !important;
+}
 
-.exp-btn-preview  { background: #3366cc; }
-.exp-btn-link     { background: #5a5acd; }
-.exp-btn-copy     { background: #339933; }
-.exp-btn-download { background: #996600; }
-.exp-btn-delete   { background: #cc3333; }
 
 /* ─────────────────────────────────────────────────────
    SWIPE ROW STYLES
@@ -575,10 +601,20 @@ tbody tr.selected td {
 /* ─────────────────────────────────────────────────────
    MOBILE vs DESKTOP VIEW SWITCHING (End of file for specificity)
    ───────────────────────────────────────────────────── */
-@media screen and (max-width: 1024px) {
-  /* Enforce Switch */
-  .mobile-vault-list { display: block !important; margin-top: 8px; }
-  .desktop-vault-table { display: none !important; height: 0; overflow: hidden; pointer-events: none; }
+
+/* Desktop layout by default */
+.mobile-layout {
+  display: none !important;
+}
+
+.desktop-layout {
+  display: block !important;
+}
+
+@media screen and (max-width: 900px) {
+  /* Enforce Switch for screens <= 900px */
+  .mobile-layout { display: block !important; margin-top: 8px; }
+  .desktop-layout { display: none !important; height: 0; overflow: hidden; pointer-events: none; }
 
   /* Mobile pagination bar (5 files per page) */
   .mobile-pagination {

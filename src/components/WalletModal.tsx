@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Modal from './Modal';
 import './WalletModal.css';
 
 export interface WalletProvider {
@@ -49,7 +48,7 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onSelectWall
       try {
         setInstalledWallets({
           google: true,
-          petra: !!(window as any).aptos,
+          petra: !!Object.keys(window).find(k => k.toLowerCase() === 'aptos' || k.toLowerCase() === 'petra'),
           martian: !!(window as any).martian,
         });
       } catch {
@@ -58,55 +57,48 @@ const WalletModal: React.FC<WalletModalProps> = ({ isOpen, onClose, onSelectWall
     }
   }, [isOpen]);
 
+  if (!isOpen) return null;
+
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
-      title="ShelbyOS Wallet" 
-      icon="🔑" 
-      width="340px"
-    >
-      <div style={{ fontSize: '12px', color: 'var(--border-mid)', marginBottom: '4px' }}>
-        Select an Aptos-compatible wallet to connect.
-      </div>
-
-      {isConnecting && (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '8px', 
-          fontSize: '12px',
-          color: 'var(--border-mid)',
-          marginBottom: '4px'
-        }}>
-          ⏳ Connecting… please check your wallet or browser popup.
+    <div className="modern-wallet-overlay" onClick={onClose}>
+      <div 
+        className="modern-wallet-modal" 
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modern-wallet-header">
+          <h3>Connect Wallet</h3>
+          <button className="modern-wallet-close" onClick={onClose} disabled={isConnecting}>✕</button>
         </div>
-      )}
-      
-      <div className="wallet-list">
-        {WALLETS.map(w => {
-          const isInstalled = installedWallets[w.id];
-          return (
-            <button 
-              key={w.id} 
-              className="btn95 wallet-btn"
-              onClick={() => !isConnecting && onSelectWallet(w.adapterName)}
-              disabled={!isInstalled || isConnecting}
-              style={{ opacity: isConnecting ? 0.6 : 1 }}
-            >
-              <img src={w.logo} alt={w.label} className="wallet-logo" />
-              <span style={{ flex: 1 }}>{w.label}</span>
-              <span className={`wallet-status-badge ${isInstalled ? 'status-connect' : 'status-missing'}`}>
-                {isConnecting ? '…' : (isInstalled ? 'Connect' : 'Not installed')}
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
-      <div className="modal-actions">
-        <button className="btn95" onClick={onClose} disabled={isConnecting}>Cancel</button>
+        {isConnecting && (
+          <div className="modern-wallet-connecting">
+            ⏳ Connecting… please check your popup.
+          </div>
+        )}
+
+        <div className="modern-wallet-list">
+          {WALLETS.map(w => {
+            const isInstalled = installedWallets[w.id];
+            return (
+              <div key={w.id} className="modern-wallet-item">
+                <div className="modern-wallet-info">
+                  <img src={w.logo} alt={w.label} className="modern-wallet-logo" />
+                  <span className="modern-wallet-name">{w.label}</span>
+                </div>
+                <button 
+                  className="modern-wallet-connect-btn"
+                  onClick={() => !isConnecting && onSelectWallet(w.adapterName)}
+                  disabled={!isInstalled || isConnecting}
+                >
+                  {isConnecting ? '...' : (isInstalled ? 'Connect' : 'Install')}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 };
 

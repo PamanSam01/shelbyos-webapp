@@ -1,0 +1,210 @@
+/* src/components/FundModal.css */
+
+.modern-fund-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modern-fund-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  padding: 20px;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(15px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Header */
+.modern-fund-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modern-fund-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111;
+  letter-spacing: -0.02em;
+}
+
+.modern-fund-close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #888;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+}
+
+.modern-fund-close:hover {
+  background: #f0f0f0;
+  color: #111;
+}
+
+/* Body */
+.modern-fund-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modern-fund-address {
+  cursor: pointer;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.modern-fund-address:hover {
+  border-color: #d0d0d0;
+  background: #f0f2f5;
+}
+
+.address-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.address-value {
+  font-size: 12px;
+  color: #333;
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* Balance Box */
+.modern-fund-balance {
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+}
+
+.balance-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.balance-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.balance-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.apt-badge { background: #fee2e2; color: #b91c1c; }
+.susd-badge { background: #e0e7ff; color: #4338ca; }
+
+.balance-amount {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  color: #111;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions */
+.modern-fund-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.modern-fund-btn {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.modern-fund-btn:active {
+  transform: scale(0.96);
+}
+
+.modern-fund-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modern-fund-btn.secondary {
+  background: #f0f2f5;
+  color: #444;
+}
+
+.modern-fund-btn.secondary:hover:not(:disabled) {
+  background: #e4e6e9;
+  color: #111;
+}
+
+.modern-fund-btn.primary {
+  background: #111;
+  color: #fff;
+}
+
+.modern-fund-btn.primary:hover:not(:disabled) {
+  background: #333;
+}

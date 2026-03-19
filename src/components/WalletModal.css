@@ -1,49 +1,163 @@
 /* src/components/WalletModal.css */
 
-.wallet-list {
+.modern-wallet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease;
 }
 
-.wallet-btn {
-  text-align: left;
-  padding: 7px 12px;
-  font-size: 13px;
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modern-wallet-modal {
+  /* Base (neutral / fallback) — themes.css overrides all of these */
+  background: #f0f0f0;
+  border: 2px solid #a0a0a0;
+  border-radius: 4px;
   width: 100%;
+  max-width: 380px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    0 2px 8px rgba(0,0,0,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+  padding: 0;          /* inner sections own their padding */
+  overflow: hidden;
+  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
+
+/* ── Header bar (window titlebar style) ── */
+.modern-wallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  /* base gradient — overridden per theme */
+  background: linear-gradient(180deg, #4a88d8 0%, #0a246a 100%);
+}
+
+.modern-wallet-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.modern-wallet-close {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+.modern-wallet-close:hover {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+/* ── Body area ── */
+.modern-wallet-body {
+  padding: 14px 16px;
+}
+
+.modern-wallet-connecting {
+  text-align: center;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 2px;
+  margin-bottom: 12px;
+  border: 1px solid;
+}
+
+.modern-wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.modern-wallet-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 52px;
+  padding: 6px 10px;
+  border-bottom: 1px solid;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.modern-wallet-item:last-child {
+  border-bottom: none;
+}
+
+.modern-wallet-info {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.wallet-logo {
-  width: 24px;
-  height: 24px;
+.modern-wallet-logo {
+  width: 30px;
+  height: 30px;
   border-radius: 4px;
-  flex-shrink: 0;
   object-fit: cover;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
 }
 
-.wallet-status-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 1px;
+.modern-wallet-name {
+  font-weight: 600;
+  font-size: 13px;
 }
 
-.status-connect {
-  background: #d4f0d4;
-  border: 1px solid #006600;
-  color: #004400;
-}
-
-.status-missing {
-  border: 1px solid var(--border-mid);
-  color: var(--border-mid);
-}
-
-.wallet-msg {
+.modern-wallet-connect-btn {
+  padding: 5px 12px;
+  border-radius: 2px;
   font-size: 12px;
-  min-height: 16px;
-  margin-top: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.modern-wallet-connect-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.modern-wallet-connect-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media screen and (max-width: 480px) {
+  .modern-wallet-modal {
+    max-width: 100%;
+  }
 }

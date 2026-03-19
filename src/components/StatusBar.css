@@ -5,69 +5,155 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 26px;
-  padding: 3px 10px;
+  height: 28px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  font-size: 11px;
   z-index: 1000;
-  color: var(--text);
-  background: linear-gradient(180deg, #ece9d8 0%, #d8d4c0 100%);
-  border-top: 2px solid #7a96b8;
-  font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  
+  /* Fallback base styles — overriden by theme */
+  background: #f8f9fa;
+  border-top: 1px solid #e5e7eb;
+  color: #111;
 }
 
-.statusbar span {
-  padding: 1px 14px 1px 0;
-  margin-right: 14px;
-  border-right: 1px solid var(--border-mid);
-  white-space: nowrap;
+.statusbar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px; /* Reduced gap between text elements */
+  padding: 0 16px;
+  border-right: 1px solid rgba(0,0,0,0.1);
+  height: 100%;
+  cursor: default;
+  transition: background 0.15s, opacity 0.15s;
 }
 
-.statusbar span:last-child {
-  border-right: none;
+.statusbar-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+  opacity: 1; /* Reset any dimmed opacity */
+}
+
+.statusbar-item:first-child {
+  padding-left: 0;
+}
+
+.statusbar .icon {
+  font-size: 13px; /* Requested 12-14px range */
+  margin-right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85; /* Blend better with the theme */
+}
+
+/* Typography Hierarchy */
+.statusbar .label {
+  font-size: 11px;
+  opacity: 0.7;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.statusbar .value {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* RPC Indicator System */
+
+
+.rpc-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rpc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 4px currentColor;
+  position: relative;
+}
+
+/* Pulse animation for a "live" feel */
+.rpc-dot::after {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px; right: -2px; bottom: -2px;
+  border-radius: 50%;
+  background: inherit;
+  animation: rpcPulse 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.5;
+}
+
+@keyframes rpcPulse {
+  0%   { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
 }
 
 .statusbar-credits {
   margin-left: auto;
-  padding: 1px 0;
-  white-space: nowrap;
-  border-right: none !important;
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 .statusbar-credits a {
   color: inherit;
   text-decoration: none;
+  font-weight: 600;
 }
 
 .statusbar-credits a:hover {
   text-decoration: underline;
+  opacity: 1;
 }
 
+/* ─────────────────────────────────────────────────
+   MOBILE / PORTRAIT RESPONSIVE
+───────────────────────────────────────────────── */
 @media (orientation: portrait), (max-width: 680px) {
   .statusbar {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
     height: auto;
-    padding: 6px 10px;
+    padding: 8px 12px;
   }
   
-  .statusbar span {
-    padding: 2px 8px 2px 0;
-    margin-right: 8px;
-    font-size: 10px;
+  .statusbar-item {
+    border-right: none;
+    padding: 4px 0;
+    height: auto;
+    border-bottom: 1px solid rgba(0,0,0,0.05); /* subtle horizontal separator */
   }
 
+  /* Grid assignment */
+  .statusbar-item:nth-child(1) { grid-column: 1; }
+  .statusbar-item:nth-child(2) { grid-column: 2; border-left: 1px solid rgba(0,0,0,0.05); padding-left: 12px; }
+  
+  .statusbar-item:nth-child(3) { grid-column: 1; }
+  .statusbar-item:nth-child(4) { grid-column: 2; border-left: 1px solid rgba(0,0,0,0.05); padding-left: 12px; }
+  
+  .statusbar-item:nth-child(5) { grid-column: 1 / -1; justify-content: center; border-bottom: none; padding-top: 8px; }
+
   .statusbar-credits {
+    grid-column: 1 / -1;
+    text-align: center;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    padding-top: 8px;
+    margin-top: 4px;
     margin-left: 0;
     width: 100%;
-    border-top: 1px solid rgba(0,0,0,0.1);
-    padding-top: 4px;
     font-size: 10px;
+    justify-content: center;
   }
 }
 
 @media (max-width: 380px) {
-  .statusbar span:nth-child(n+3) {
-    display: none; /* Hide deeper stats on tiny screens */
+  .statusbar-item:nth-child(1),
+  .statusbar-item:nth-child(2) {
+    display: none; /* Hide Files & Size on tiny screens */
   }
 }
