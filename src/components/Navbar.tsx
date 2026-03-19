@@ -27,12 +27,13 @@ const Navbar: React.FC<NavbarProps> = ({
         <span className="navTitle">ShelbyOS</span>
       </a>
       <span className="navSubtext">Decentralized Storage Desktop on Shelby Network</span>
-      <span className="navSep">//</span>
-      <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/tools/wallets/petra-setup#apt-faucet', '_blank')}>Faucet</a>
-      <span className="navSep">//</span>
-      <a className="navLink" onClick={() => window.open('https://explorer.shelby.xyz/shelbynet', '_blank')}>Explorer</a>
-      <span className="navSep">//</span>
-      <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/', '_blank')}>Docs</a>
+      <div className="navLinks">
+        <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/tools/wallets/petra-setup#apt-faucet', '_blank')}>Faucet</a>
+        <span className="navSep">//</span>
+        <a className="navLink" onClick={() => window.open('https://explorer.shelby.xyz/shelbynet', '_blank')}>Explorer</a>
+        <span className="navSep">//</span>
+        <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/', '_blank')}>Docs</a>
+      </div>
       <div className="navRight">
         <label className="navControl">
           Network

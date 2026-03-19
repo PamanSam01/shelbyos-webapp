@@ -117,6 +117,12 @@
   padding: 4px 13px 2px 15px;
 }
 
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 @media (max-width: 1100px) {
   .navSubtext { display: none; }
   .nav { gap: 10px; padding: 6px 12px; }
@@ -124,39 +130,43 @@
 }
 
 @media screen and (max-width: 800px) {
-  .nav { flex-wrap: wrap; height: auto; justify-content: center; }
+  .nav { flex-wrap: wrap; height: auto; justify-content: center; padding: 10px; }
+  .navLinks { margin: 8px 0; width: 100%; justify-content: center; }
   .navRight { 
     width: 100%; 
     justify-content: center;
     flex-wrap: wrap; 
     padding-top: 8px; 
-    margin-top: 6px; 
+    margin-top: 2px; 
     border-top: 1px solid rgba(255,255,255,0.1); 
   }
 }
 
-
-
 @media (max-width: 600px) {
+  .nav { gap: 4px; }
   .navRight {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     width: 100%;
+    margin-top: 10px;
   }
   .navControl {
     justify-content: center;
     width: 100%;
+    font-size: 11px;
   }
+  .select95 { width: 100%; max-width: 100px; }
   .btn95 {
     width: 100%;
+    padding: 6px 4px;
+    font-size: 11px;
   }
 }
 
 @media (max-width: 480px) {
   .navTitle, .navSubtext, .navSep { display: none; }
-  .navLogoLink { margin-right: 4px; }
-  .navLink { font-size: 12px; padding: 3px; }
-  .btn95 { padding: 4px 10px; font-size: 11px; }
-  .navControl { font-size: 11px; }
+  .navLogoLink { margin-right: 0; }
+  .navLinks { gap: 15px; margin: 4px 0 10px 0; }
+  .navLink { font-size: 12px; padding: 4px 8px; border: 1px solid rgba(255,255,255,0.2); }
 }
