@@ -38,6 +38,7 @@ interface ShelbyVaultTableProps {
 }
 
 const PAGE_SIZE = 10;
+const MOBILE_PAGE_SIZE = 5;
 
 /** Truncate a long filename for mobile display */
 const truncateName = (name: string, maxLen = 24) =>
@@ -131,6 +132,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
   };
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [mobilePage, setMobilePage] = useState(1);
 
   const fmtSize = (b: number) => {
     if (b < 1024) return b + ' B';
@@ -160,12 +162,18 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
     (!filterStatus || f.status === filterStatus)
   );
 
-  useEffect(() => { setCurrentPage(1); }, [searchQuery, filterStatus]);
+  useEffect(() => { setCurrentPage(1); setMobilePage(1); }, [searchQuery, filterStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filteredFiles.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const pageStart = (safePage - 1) * PAGE_SIZE;
   const pageFiles = filteredFiles.slice(pageStart, pageStart + PAGE_SIZE);
+
+  // Mobile pagination (5 per page)
+  const mobileTotalPages = Math.max(1, Math.ceil(filteredFiles.length / MOBILE_PAGE_SIZE));
+  const safeMobilePage = Math.min(mobilePage, mobileTotalPages);
+  const mobilePageStart = (safeMobilePage - 1) * MOBILE_PAGE_SIZE;
+  const mobilePageFiles = filteredFiles.slice(mobilePageStart, mobilePageStart + MOBILE_PAGE_SIZE);
 
   const toggleCheck = (id: number) => {
     const newChecked = new Set(checkedIds);
@@ -225,10 +233,10 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
           </select>
         </div>
 
-        {/* ─── MOBILE EXPANDABLE CARD LIST (shown only on mobile via CSS) ─── */}
+        {/* ─── MOBILE EXPANDABLE CARD LIST (shown only on mobile via CSS, 5 per page) ─── */}
         <div className="mobile-vault-list">
           {emptyState}
-          {!emptyState && pageFiles.map(s => (
+          {!emptyState && mobilePageFiles.map(s => (
             <ExpandableRow
               key={s.id}
               file={s}
@@ -243,6 +251,33 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               onDelete={() => onDelete?.(s.id)}
             />
           ))}
+
+          {/* Mobile pagination bar */}
+          {!emptyState && mobileTotalPages > 1 && (
+            <div className="mobile-pagination">
+              <button
+                className="mobile-page-btn"
+                onClick={() => setMobilePage(p => Math.max(1, p - 1))}
+                disabled={safeMobilePage === 1}
+              >◀ Prev</button>
+              <span className="mobile-page-info">
+                Page {safeMobilePage} / {mobileTotalPages}
+                <span className="mobile-page-count"> · {filteredFiles.length} files</span>
+              </span>
+              <button
+                className="mobile-page-btn"
+                onClick={() => setMobilePage(p => Math.min(mobileTotalPages, p + 1))}
+                disabled={safeMobilePage === mobileTotalPages}
+              >Next ▶</button>
+            </div>
+          )}
+
+          {/* File count when only 1 page */}
+          {!emptyState && mobileTotalPages === 1 && (
+            <div className="mobile-page-single">
+              {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>
 
         {/* ─── DESKTOP TABLE (hidden on mobile via CSS) ─── */}
