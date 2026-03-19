@@ -424,11 +424,16 @@ tbody tr.selected td {
   font-family: var(--mono);
 }
 
-.swipe-row-hint {
+.swipe-row-hint-btn {
   font-size: 11px;
   color: var(--border-mid);
   flex-shrink: 0;
-  padding-right: 4px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Action panel revealed by swiping left */

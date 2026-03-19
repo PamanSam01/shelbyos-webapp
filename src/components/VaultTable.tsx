@@ -58,46 +58,80 @@ const SwipeRow: React.FC<{
 }> = ({ file, checked, onToggle, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(false);
+  const [animating, setAnimating] = useState(false);
   const startX = useRef(0);
-  const currentOffset = useRef(0);
+  const baseOffset = useRef(0);
+  const hasMoved = useRef(false);
   const ACTION_W = 200;
+
+  const snapTo = (target: number, newOpen: boolean) => {
+    setAnimating(true);
+    setOffset(target);
+    setOpen(newOpen);
+    setTimeout(() => setAnimating(false), 250);
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     startX.current = e.touches[0].clientX;
-    currentOffset.current = open ? -ACTION_W : 0;
+    baseOffset.current = open ? -ACTION_W : 0;
+    hasMoved.current = false;
+    setAnimating(false);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     const dx = e.touches[0].clientX - startX.current;
-    const newOffset = Math.max(-ACTION_W, Math.min(0, currentOffset.current + dx));
+    if (Math.abs(dx) > 5) {
+      hasMoved.current = true;
+      e.preventDefault();
+    }
+    const newOffset = Math.max(-ACTION_W, Math.min(0, baseOffset.current + dx));
     setOffset(newOffset);
   };
 
   const handleTouchEnd = () => {
-    if (!open && offset < -ACTION_W / 3) {
-      setOffset(-ACTION_W);
-      setOpen(true);
-    } else if (open && offset > -ACTION_W * 0.66) {
-      setOffset(0);
-      setOpen(false);
+    if (!hasMoved.current) {
+      // Treated as tap — just toggle checkbox
+      return;
+    }
+    const threshold = ACTION_W * 0.35;
+    if (!open && offset < -threshold) {
+      snapTo(-ACTION_W, true);
+    } else if (open && offset > -ACTION_W + threshold) {
+      snapTo(0, false);
     } else {
-      setOffset(open ? -ACTION_W : 0);
+      snapTo(open ? -ACTION_W : 0, open);
     }
   };
 
-  const closePanel = () => { setOffset(0); setOpen(false); };
+  const handleRowClick = () => {
+    if (hasMoved.current) return;
+    onToggle();
+  };
 
-  const act = (fn?: () => void) => { closePanel(); fn?.(); };
+  const togglePanel = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (open) snapTo(0, false);
+    else snapTo(-ACTION_W, true);
+  };
+
+  const act = (fn?: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    snapTo(0, false);
+    fn?.();
+  };
 
   return (
     <div className="swipe-row-wrapper">
       <div
         className={`swipe-row-content${checked ? ' swipe-row-selected' : ''}`}
-        style={{ transform: `translateX(${offset}px)`, transition: 'transform 0.2s ease' }}
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: animating ? 'transform 0.22s cubic-bezier(0.4,0,0.2,1)' : 'none',
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={onToggle}
+        onClick={handleRowClick}
       >
         <div className="swipe-row-check">
           <input type="checkbox" checked={checked} onClick={(e) => e.stopPropagation()} onChange={onToggle} />
@@ -114,19 +148,22 @@ const SwipeRow: React.FC<{
               : <span className="badge-pending"> · PENDING</span>}
           </div>
         </div>
-        <div className="swipe-row-hint">{'◀'}</div>
+        <button className="swipe-row-hint-btn" onClick={togglePanel} onTouchEnd={(e) => { e.preventDefault(); togglePanel(e as unknown as React.MouseEvent); }}>
+          {open ? '✕' : '◀'}
+        </button>
       </div>
 
       <div className="swipe-actions" style={{ width: ACTION_W }}>
-        <button className="swipe-btn swipe-btn-preview" onTouchEnd={(e) => { e.stopPropagation(); act(onPreview); }} onClick={(e) => { e.stopPropagation(); act(onPreview); }}>👁<span>Preview</span></button>
-        <button className="swipe-btn swipe-btn-link" onTouchEnd={(e) => { e.stopPropagation(); act(onOpenExplorer); }} onClick={(e) => { e.stopPropagation(); act(onOpenExplorer); }}>🔗<span>Explorer</span></button>
-        <button className="swipe-btn swipe-btn-copy" onTouchEnd={(e) => { e.stopPropagation(); act(onCopyLink); }} onClick={(e) => { e.stopPropagation(); act(onCopyLink); }}>📋<span>Copy</span></button>
-        <button className="swipe-btn swipe-btn-download" onTouchEnd={(e) => { e.stopPropagation(); act(onDownload); }} onClick={(e) => { e.stopPropagation(); act(onDownload); }}>⬇<span>Download</span></button>
-        <button className="swipe-btn swipe-btn-delete" onTouchEnd={(e) => { e.stopPropagation(); act(onDelete); }} onClick={(e) => { e.stopPropagation(); act(onDelete); }}>🗑<span>Delete</span></button>
+        <button className="swipe-btn swipe-btn-preview"  onClick={act(onPreview)}>👁<span>Preview</span></button>
+        <button className="swipe-btn swipe-btn-link"     onClick={act(onOpenExplorer)}>🔗<span>Explorer</span></button>
+        <button className="swipe-btn swipe-btn-copy"     onClick={act(onCopyLink)}>📋<span>Copy</span></button>
+        <button className="swipe-btn swipe-btn-download" onClick={act(onDownload)}>⬇<span>Download</span></button>
+        <button className="swipe-btn swipe-btn-delete"   onClick={act(onDelete)}>🗑<span>Delete</span></button>
       </div>
     </div>
   );
 };
+
 
 const VaultTable: React.FC<ShelbyVaultTableProps> = ({
   files,
