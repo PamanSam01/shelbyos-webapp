@@ -44,17 +44,30 @@
   text-decoration: underline;
 }
 
-@media (max-width: 680px) {
+@media (orientation: portrait), (max-width: 680px) {
   .statusbar {
     flex-wrap: wrap;
     height: auto;
-    padding: 4px 10px;
-    position: relative; /* On mobile, let it flow if needed, or stay fixed? Legacy says fixed but wrap makes it grow */
+    padding: 6px 10px;
   }
   
   .statusbar span {
     padding: 2px 8px 2px 0;
     margin-right: 8px;
-    border-right: 1px solid var(--border-mid);
+    font-size: 10px;
+  }
+
+  .statusbar-credits {
+    margin-left: 0;
+    width: 100%;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    padding-top: 4px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .statusbar span:nth-child(n+3) {
+    display: none; /* Hide deeper stats on tiny screens */
   }
 }

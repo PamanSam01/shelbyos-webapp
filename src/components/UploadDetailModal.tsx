@@ -7,7 +7,7 @@ export interface UploadQueueItem {
   permission: string
   permConfig: any
   permOverridden: boolean
-  status: 'ready' | 'uploading' | 'stored' | 'error'
+  status: 'ready' | 'uploading' | 'stored'
 }
 
 interface UploadDetailModalProps {

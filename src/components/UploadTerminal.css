@@ -14,30 +14,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* resize: both; -- Removed for custom multi-direction */
-  min-width: 320px;
-  min-height: 200px;
-  container-type: size;
   transition: opacity 0.3s ease, box-shadow 0.3s ease;
   animation: utSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Resize Handles */
-.resizer {
-  position: absolute;
-  z-index: 10;
-}
-.resizer.n { top: 0; left: 0; right: 0; height: 6px; cursor: n-resize; }
-.resizer.s { bottom: 0; left: 0; right: 0; height: 6px; cursor: s-resize; }
-.resizer.e { top: 0; bottom: 0; right: 0; width: 6px; cursor: e-resize; }
-.resizer.w { top: 0; bottom: 0; left: 0; width: 6px; cursor: w-resize; }
-.resizer.nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nw-resize; z-index: 11; }
-.resizer.ne { top: 0; right: 0; width: 10px; height: 10px; cursor: ne-resize; z-index: 11; }
-.resizer.sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: sw-resize; z-index: 11; }
-.resizer.se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; z-index: 11; }
-
-.upload-terminal.resizing {
-  transition: none; /* Disable transitions while resizing for smoothness */
 }
 
 @keyframes utSlideUp {
@@ -59,7 +37,7 @@
   align-items: center;
   border-bottom: 1px solid rgba(62, 196, 255, 0.3);
   font-family: var(--font-ui, 'Trebuchet MS', sans-serif);
-  font-size: clamp(11px, 2.8cqw, 20px);
+  font-size: 11px;
   font-weight: bold;
   color: #fff;
   letter-spacing: 1px;
@@ -87,13 +65,14 @@
 
 .ut-body {
   padding: 12px;
+  min-height: 140px;
+  max-height: 220px;
+  overflow-y: auto;
   font-family: var(--mono, 'Courier New', monospace);
-  font-size: clamp(12px, 3.2cqw, 24px);
+  font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1; /* Stretch to fill resized container */
-  overflow-y: auto;
 }
 
 .ut-body::-webkit-scrollbar {

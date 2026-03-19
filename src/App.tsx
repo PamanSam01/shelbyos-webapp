@@ -66,6 +66,7 @@ function App() {
   const [accessDeniedMsg, setAccessDeniedMsg] = useState('')
   const [accessDeniedAction, setAccessDeniedAction] = useState<{ label: string, fn: () => void } | null>(null)
   const [rpcStatus, setRpcStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const [files, setFiles] = useState<StoredFile[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(true);
@@ -94,9 +95,6 @@ function App() {
 
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
 
-  // Data State - Fixed: Initialized as empty, removed dummy data
-  const [files, setFiles] = useState<StoredFile[]>([])
-
   // Helper: Fetch vault history from Aptos REST API (no auth needed, pagination supported)
   const fetchVaultHistory = useCallback(async () => {
     if (!walletAddress || !ACTIVE_NET) {
@@ -112,141 +110,145 @@ function App() {
       const rawHex = addr.startsWith('0x') ? addr.slice(2) : addr;
       addr = '0x' + rawHex.padStart(64, '0');
 
-      // 1. Try GraphQL Indexer First (Source of Truth, naturally skips deleted/expired/unwritten files)
-      try {
-        const indexerUrl = ACTIVE_NET.shelbyIndexer;
-        let apiKey = '';
-        if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
-        if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
+      // 1. Try GraphQL Indexer First (Source of Truth)
+      const indexerUrl = ACTIVE_NET.shelbyIndexer;
+      let apiKey = '';
+      if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
+      if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
 
-        console.log(`[Vault] Fetching from Indexer: ${ACTIVE_NET.label}`);
-        console.log(`[Vault] activeNetKey: ${activeNetKey}`);
-        console.log(`[Vault] Indexer URL: ${indexerUrl ? 'OK' : 'MISSING'}`);
-        console.log(`[Vault] API Key present: ${apiKey ? 'YES' : 'NO'}`);
-
-        if (!indexerUrl || !apiKey) {
-          const missingMsg = !indexerUrl ? "Indexer URL" : "API Key";
-          throw new Error(`Missing ${missingMsg} (401). Please check Vercel Env Variables (VITE_SHELBY_API_KEY_${ACTIVE_NET.label.toUpperCase()})`);
-        }
-
-        const currentMicros = String(Date.now() * 1000);
-        const query = `
-          query getBlobs($where: blobs_bool_exp) {
-            blobs(where: $where) {
-              blob_name
-              size
-              created_at
-              expires_at
-              is_deleted
-              is_written
-            }
-          }
-        `;
-        const variables = {
-          where: {
-            owner: { _eq: addr },
-            is_deleted: { _eq: "0" },
-            expires_at: { _gte: currentMicros }
-          }
-        };
-
-        const res = await fetch(indexerUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({ query, variables })
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(`[Vault] GraphQL Indexer HTTP Error: ${res.status} ${text}`);
-          throw new Error(`GraphQL Indexer HTTP Error: ${res.status} ${text}`);
-        }
-
-        const json = await res.json();
-        if (json.errors) {
-          console.error(`[Vault] GraphQL Indexer Query Error: ${json.errors[0]?.message}`);
-          throw new Error(`GraphQL Indexer Query Error: ${json.errors[0]?.message || 'Unknown GraphQL error'}`);
-        }
-
-        const rawBlobs: any[] = json.data?.blobs || [];
-        const accountBlobs = rawBlobs.filter((b: any) =>
-          Number(b.is_written) === 1 && Number(b.is_deleted) === 0
-        );
-
-        if (Array.isArray(accountBlobs)) {
-          console.log(`[Vault] Found ${accountBlobs.length} active blobs via GraphQL Indexer`);
-
-          const history: StoredFile[] = accountBlobs.map((blob: any) => {
-            const blobName: string = blob.blob_name || 'Unknown';
-            const tsMicro = parseInt(blob.created_at) || 0;
-            const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
-            const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-            return {
-              id: tsMicro || Math.random(),
-              name: blobName,
-              ext,
-              size: parseInt(blob.size) || 0,
-              date: d.toISOString().split('T')[0],
-              time: d.toTimeString().slice(0, 5),
-              uploader: addr,
-              status: 'stored' as const,
-              vis: 'public' as any,
-              permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-              network: ACTIVE_NET.label,
-              cid: blobName,
-              txHash: '',
-            };
-          });
-
-          // Sort newest first
-          history.sort((a, b) => b.id - a.id);
-          
-          const historyWithPerms = history.map(f => {
-            const storageKey = `shelbyos_perm_${addr}/${f.name}`;
-            const saved = localStorage.getItem(storageKey);
-            if (saved) {
-              try {
-                const savedConfig = JSON.parse(saved);
-                return { ...f, permConfig: savedConfig, vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any };
-              } catch { /* ignore */ }
-            }
-            return f;
-          });
-
-          setFiles(historyWithPerms);
-          return; // Exit early!
-        }
-      } catch (gqlErr: any) {
-        console.warn('[Vault] GraphQL Indexer failed:', gqlErr);
-        // We drop the REST API fallback to prevent "Ghost Files" entirely.
-        // The REST fallback couldn't reliably track is_written or complex indexer states.
-        // If the indexer fails (e.g. 401 Unauthorized due to missing Vercel API Key),
-        // we show an empty vault safely to match the Explorer's "0 blobs found".
+      if (!indexerUrl || !apiKey) {
         setFiles([]);
-        if (gqlErr.message?.includes('401') || gqlErr.message?.includes('Unauthorized')) {
-          setHistoryError('Please configure your VITE_SHELBY_API_KEY_TESTNET in Vercel to sync history.');
-        }
+        return;
       }
 
+      const currentMicros = String(Date.now() * 1000);
+      const query = `
+        query getBlobs($where: blobs_bool_exp) {
+          blobs(where: $where) {
+            blob_name
+            size
+            created_at
+            expires_at
+            is_deleted
+            is_written
+          }
+        }
+      `;
+      const variables = {
+        where: {
+          owner: { _eq: addr },
+          is_deleted: { _eq: "0" },
+          expires_at: { _gte: currentMicros }
+        }
+      };
+
+      const res = await fetch(indexerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ query, variables })
+      });
+
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || 'GraphQL Error');
+
+      const rawBlobs: any[] = json.data?.blobs || [];
+      const accountBlobs = rawBlobs.filter((b: any) =>
+        Number(b.is_written) === 1 && Number(b.is_deleted) === 0
+      );
+
+      const history: StoredFile[] = accountBlobs.map((blob: any) => {
+        const blobName: string = blob.blob_name || 'Unknown';
+        const tsMicro = parseInt(blob.created_at) || 0;
+        const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
+        const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
+        return {
+          id: tsMicro || Math.random(),
+          name: blobName,
+          ext,
+          size: parseInt(blob.size) || 0,
+          date: d.toISOString().split('T')[0],
+          time: d.toTimeString().slice(0, 5),
+          uploader: addr,
+          status: 'stored' as const,
+          vis: 'public' as any,
+          permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
+          network: ACTIVE_NET.label,
+          cid: blobName,
+          txHash: '',
+        };
+      });
+
+      history.sort((a, b) => b.id - a.id);
+      
+      const historyWithPerms = history.map(f => {
+        const storageKey = `shelbyos_perm_${addr}/${f.name}`;
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const savedConfig = JSON.parse(saved);
+            return { ...f, permConfig: savedConfig, vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any };
+          } catch { /* ignore */ }
+        }
+        return f;
+      });
+
+      setFiles(historyWithPerms);
+
     } catch (err: any) {
-      console.warn('[Vault] Error fetching vault history:', err?.message);
-      setHistoryError(err?.message || 'Failed to sync history');
+      console.warn('[Vault] Sync failed:', err.message);
+      setHistoryError(err.message);
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [walletAddress, ACTIVE_NET, activeNetKey]);
+  }, [walletAddress, ACTIVE_NET]);
 
-  // Fetch history when wallet connects
-  useEffect(() => {
-    if (walletConnected && walletAddress) {
-      fetchVaultHistory();
+  const fetchActivities = useCallback(async () => {
+    if (!walletAddress || !ACTIVE_NET) return;
+    const indexerUrl = ACTIVE_NET.shelbyIndexer;
+    let apiKey = '';
+    if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
+    if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
+    if (!indexerUrl || !apiKey) return;
+
+    try {
+      const query = `
+        query getActivities($where: blob_activities_bool_exp) {
+          blob_activities(where: $where, order_by: { timestamp: desc }, limit: 20) {
+            blob_name
+            type
+            timestamp
+            transaction_hash
+          }
+        }
+      `;
+      const variables = { where: { account_address: { _eq: walletAddress.toLowerCase() } } };
+      const res = await fetch(indexerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ query, variables })
+      });
+      const json = await res.json();
+      const raw = json.data?.blob_activities || [];
+      // Synced to terminal below
+
+      // Sync activities to terminal logs as "EVENTS"
+      raw.forEach((act: any) => {
+        const date = new Date(parseInt(act.timestamp) / 1000).toLocaleTimeString();
+        const type = String(act.type).toUpperCase();
+        addLog('EVNT', `${date} | ${type}: ${act.blob_name.split('/').pop()}`);
+      });
+    } catch (err) {
+      console.warn("[Vault] Failed to fetch activities:", err);
     }
-  }, [walletConnected, walletAddress, fetchVaultHistory]);
+  }, [walletAddress, ACTIVE_NET, addLog]);
 
-  // Real-time polling: re-fetch vault every 60 seconds while wallet is connected
+  useEffect(() => {
+    if (walletConnected) {
+      fetchVaultHistory();
+      fetchActivities();
+    }
+  }, [walletConnected, fetchVaultHistory, fetchActivities]);
+
   useEffect(() => {
     if (!walletConnected || !walletAddress) return;
     const pollInterval = setInterval(() => {
@@ -584,6 +586,7 @@ function App() {
       showToast("Waiting for wallet approval...", "info");
       addLog('AUTH', 'Awaiting wallet signature for contract transaction...');
       const payload = ShelbyBlobClient.createRegisterBlobPayload({
+        deployer: ACTIVE_NET.contract as any,
         account: account as any,
         blobName: file.name,
         blobMerkleRoot: commitments.blob_merkle_root,
@@ -882,7 +885,10 @@ function App() {
       else if (cleanName.startsWith(ownerPrefixLower)) cleanName = cleanName.slice(ownerPrefixLower.length);
 
       const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
-      const payload = ShelbyBlobClient.createDeleteBlobPayload({ blobName: cleanName });
+      const payload = ShelbyBlobClient.createDeleteBlobPayload({ 
+        deployer: ACTIVE_NET.contract as any,
+        blobName: cleanName 
+      });
       const txResult = await signAndSubmitTransaction({ data: payload });
       const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
       if (!txHash) throw new Error('No tx hash returned after delete');
@@ -890,8 +896,9 @@ function App() {
       showToast(`Confirming deletion on-chain…`, 'info');
       await aptos.waitForTransaction({ transactionHash: txHash });
 
-      // Remove from local list after confirmed
-      setFiles(prev => prev.filter(fi => fi.id !== id));
+      // Re-fetch everything to ensure synced state
+      await fetchVaultHistory();
+      await fetchActivities();
       showToast(`✓ "${f.name}" deleted from blockchain`, 'success');
     } catch (err: any) {
       const msg: string = err?.message || '';
@@ -941,7 +948,7 @@ function App() {
   if (!ACTIVE_NET) {
     return (
       <div style={{ padding: 20, fontFamily: 'Tahoma', background: '#ece9d8', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="window" style={{ width: '300px' }}>
+        <div className="window" style={{ width: 'min(300px, 90vw)' }}>
           <div className="titlebar"><span>System Message</span></div>
           <div className="window-body">
             <p>Network initialization error. Please check your configuration.</p>
@@ -954,7 +961,7 @@ function App() {
   if (!Array.isArray(files)) {
     return (
       <div style={{ padding: 20, fontFamily: 'Tahoma', background: '#ece9d8', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="window" style={{ width: '300px' }}>
+        <div className="window" style={{ width: 'min(300px, 90vw)' }}>
           <div className="titlebar"><span>System Message</span></div>
           <div className="window-body">
             <p>Initializing ShelbyOS...</p>
@@ -967,24 +974,16 @@ function App() {
   // Defensive render guard
   try {
     return (
-      <>
+      <div className="app-container">
         <Navbar 
           activeNetwork={activeNetKey}
-          walletConnected={walletConnected} 
-          onThemeChange={(newTheme) => {
-            setTheme(newTheme);
-            showToast(`Theme switched to ${newTheme.replace('theme-', '').toUpperCase()}`);
-          }}
           onNetworkChange={(net) => {
             setActiveNetKey(net as any);
             showToast(`Switched to ${NETWORKS[net as keyof typeof NETWORKS]?.label || net}`);
           }}
-          onConnectWallet={() => {
-            if (walletConnected) {
-              handleWalletDisconnect();
-            } else {
-              setIsWalletModalOpen(true);
-            }
+          onThemeChange={(newTheme) => {
+            setTheme(newTheme);
+            showToast(`Theme switched to ${newTheme.replace('theme-', '').toUpperCase()}`);
           }}
           onFundAccount={() => {
             if (!walletConnected) {
@@ -994,8 +993,17 @@ function App() {
               setIsFundModalOpen(true);
             }
           }}
+          onConnectWallet={() => {
+            if (walletConnected) {
+              handleWalletDisconnect();
+            } else {
+              setIsWalletModalOpen(true);
+            }
+          }}
+          walletConnected={walletConnected}
         />
-        <div className="layout">
+        <main className="layout-wrapper">
+          <div className="layout">
           <VaultTable
             files={files}
             checkedIds={checkedIds}
@@ -1075,14 +1083,15 @@ function App() {
             </div>
           </div>
         </div>
+      </main>
 
-        <StatusBar 
-          fileCount={files?.length || 0}
-          totalSize={((files ?? []).reduce((a, b) => a + b.size, 0) / 1048576).toFixed(2) + ' MB'}
-          walletStatus={walletConnected ? (String(walletAddress).slice(0, 6) + '...' + String(walletAddress).slice(-4)) : 'Not Connected'}
-          networkStatus={ACTIVE_NET?.label || 'Unknown'}
-          rpcStatus={rpcStatus}
-        />
+      <StatusBar 
+        fileCount={files?.length || 0}
+        totalSize={((files ?? []).reduce((a, b) => a + b.size, 0) / 1048576).toFixed(2) + ' MB'}
+        walletStatus={walletConnected ? (String(walletAddress).slice(0, 6) + '...' + String(walletAddress).slice(-4)) : 'Not Connected'}
+        networkStatus={ACTIVE_NET?.label || 'Unknown'}
+        rpcStatus={rpcStatus}
+      />
 
         <WalletModal 
           isOpen={isWalletModalOpen}
@@ -1196,13 +1205,13 @@ function App() {
           isVisible={toast.isVisible} 
           onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
         />
-      </>
+      </div>
     )
   } catch (err) {
     console.error("React render failure", err);
     return (
       <div style={{ padding: 20, fontFamily: 'Tahoma', background: '#ece9d8', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="window" style={{ width: '300px' }}>
+        <div className="window" style={{ width: 'min(300px, 90vw)' }}>
           <div className="titlebar"><span>Critical Error</span></div>
           <div className="window-body">
             <p>ShelbyOS failed to render. Reload the application.</p>

@@ -101,9 +101,12 @@
   margin-top: 8px;
 }
 
-@media (max-width: 680px) {
+@media (orientation: portrait), (max-width: 768px) {
   .modal-win {
-    width: 96vw !important;
-    max-width: 96vw !important;
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+  .modal-body {
+    padding: 12px;
   }
 }

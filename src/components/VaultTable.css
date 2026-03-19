@@ -250,9 +250,24 @@ tbody tr.selected td {
   opacity: 1;
 }
 
-@media (max-width: 680px) {
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 480px; }
+@media (max-width: 1024px) {
+  .table-wrap { max-height: calc(100vh - 350px); }
+}
+
+@media (orientation: portrait), (max-width: 768px) {
+  th:nth-child(4), td:nth-child(4) /* Date */, 
+  th:nth-child(5), td:nth-child(5) /* Uploader */ {
+    display: none;
+  }
+  .table-wrap { overflow-x: auto; width: 100%; }
+}
+
+@media (max-width: 480px) {
+  th:nth-child(2), td:nth-child(2) /* Size */ {
+     display: none;
+  }
+  table { min-width: 100%; }
+  .icon-btn95 { padding: 4px 10px; font-size: 14px; } /* Larger touch targets */
 }
 
 /* ── Pagination Bar ─────────────────────────────── */

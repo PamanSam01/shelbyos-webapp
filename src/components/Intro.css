@@ -823,3 +823,25 @@
   .boot-wrapper { width: 95vw; }
   .intro-copyright { font-size: 10px; bottom: 12px; white-space: normal; text-align: center; width: 90vw; }
 }
+@media (max-width: 600px) {
+  .logo-panel { padding: 20px 20px 15px; }
+  .os-title { font-size: clamp(32px, 12vw, 42px); }
+  .os-subtitle { letter-spacing: 2px; font-size: 11px; }
+  .progress-panel { padding: 15px 20px; }
+  .enter-panel { padding: 15px 20px 20px; }
+  .terminal-body { padding: 8px 12px; font-size: 11px; }
+  .status-grid { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* Fill space on high-resolution tall portrait monitors (e.g., 1080x1920) */
+@media screen and (orientation: portrait) and (min-height: 1200px) and (min-width: 768px) {
+  .boot-wrapper {
+    transform: scale(1.15);
+    transform-origin: center center;
+  }
+}
+
+@media (max-width: 400px) {
+  .shelby-logo { width: 60px; height: 60px; }
+  .enter-btn-inner { padding: 9px 20px; font-size: 13px; }
+}

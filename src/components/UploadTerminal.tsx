@@ -22,68 +22,31 @@ const UploadTerminal: React.FC<UploadTerminalProps> = ({ logs, isVisible, onClos
   }, [logs, isVisible]);
 
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ width: 380, height: 260 });
   const [isDragging, setIsDragging] = useState(false);
-  const [resizeDir, setResizeDir] = useState<string | null>(null);
   
+  // Use refs to track the baseline coordinates when a drag starts, avoiding dependency loop jumping
   const dragStart = useRef({ x: 0, y: 0 });
   const posStart = useRef({ x: 0, y: 0 });
-  const sizeStart = useRef({ width: 0, height: 0 });
 
+  // Reset position whenever the terminal is toggled visible
   useEffect(() => {
-    if (isVisible) {
-      setPosition({ x: 0, y: 0 });
-      setSize({ width: 380, height: 260 });
-    }
+    if (isVisible) setPosition({ x: 0, y: 0 });
   }, [isVisible]);
 
   useEffect(() => {
-    if (!isDragging && !resizeDir) return;
+    if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        const dx = e.clientX - dragStart.current.x;
-        const dy = e.clientY - dragStart.current.y;
-        setPosition({
-          x: posStart.current.x + dx,
-          y: posStart.current.y + dy
-        });
-      } else if (resizeDir) {
-        const dx = e.clientX - dragStart.current.x;
-        const dy = e.clientY - dragStart.current.y;
-        
-        let newWidth = sizeStart.current.width;
-        let newHeight = sizeStart.current.height;
-        let newX = posStart.current.x;
-        let newY = posStart.current.y;
-
-        if (resizeDir.includes('e')) newWidth = Math.max(320, sizeStart.current.width + dx);
-        if (resizeDir.includes('s')) newHeight = Math.max(200, sizeStart.current.height + dy);
-        
-        if (resizeDir.includes('w')) {
-          const possibleWidth = sizeStart.current.width - dx;
-          if (possibleWidth >= 320) {
-            newWidth = possibleWidth;
-            newX = posStart.current.x + dx;
-          }
-        }
-        
-        if (resizeDir.includes('n')) {
-          const possibleHeight = sizeStart.current.height - dy;
-          if (possibleHeight >= 200) {
-            newHeight = possibleHeight;
-            newY = posStart.current.y + dy;
-          }
-        }
-
-        setSize({ width: newWidth, height: newHeight });
-        setPosition({ x: newX, y: newY });
-      }
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      setPosition({
+        x: posStart.current.x + dx,
+        y: posStart.current.y + dy
+      });
     };
     
     const handleMouseUp = () => {
       setIsDragging(false);
-      setResizeDir(null);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -92,46 +55,24 @@ const UploadTerminal: React.FC<UploadTerminalProps> = ({ logs, isVisible, onClos
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, resizeDir]);
+  }, [isDragging]);
 
-  const handleDragMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
     posStart.current = { x: position.x, y: position.y };
-  };
-
-  const handleResizeMouseDown = (dir: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setResizeDir(dir);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    posStart.current = { x: position.x, y: position.y };
-    sizeStart.current = { width: size.width, height: size.height };
   };
 
   if (!isVisible) return null;
 
   return (
     <div 
-      className={`upload-terminal ${isDragging ? 'dragging' : ''} ${resizeDir ? 'resizing' : ''}`}
-      style={{ 
-        transform: `translate(${position.x}px, ${position.y}px)`,
-        width: `${size.width}px`,
-        height: `${size.height}px`
-      }}
+      className={`upload-terminal ${isDragging ? 'dragging' : ''}`}
+      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
     >
-      {/* Resize Handles */}
-      <div className="resizer n" onMouseDown={(e) => handleResizeMouseDown('n', e)} />
-      <div className="resizer s" onMouseDown={(e) => handleResizeMouseDown('s', e)} />
-      <div className="resizer e" onMouseDown={(e) => handleResizeMouseDown('e', e)} />
-      <div className="resizer w" onMouseDown={(e) => handleResizeMouseDown('w', e)} />
-      <div className="resizer nw" onMouseDown={(e) => handleResizeMouseDown('nw', e)} />
-      <div className="resizer ne" onMouseDown={(e) => handleResizeMouseDown('ne', e)} />
-      <div className="resizer sw" onMouseDown={(e) => handleResizeMouseDown('sw', e)} />
-      <div className="resizer se" onMouseDown={(e) => handleResizeMouseDown('se', e)} />
-
       <div 
         className="ut-header" 
-        onMouseDown={handleDragMouseDown}
+        onMouseDown={handleMouseDown}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
         <span>ShelbyOS / Vault Uplink</span>
