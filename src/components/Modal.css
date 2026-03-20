@@ -16,9 +16,9 @@ div.modal-win {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), inset 0 0 0 1px #a6caf0;
-  width: 480px !important;
-  max-width: 92vw !important;
-  max-height: 60vh !important;
+  width: 90vw !important;
+  max-width: 360px !important;
+  max-height: 55vh !important;
   margin: auto;
   height: auto !important;
   display: flex;
@@ -70,10 +70,10 @@ div.modal-win {
 }
 
 .modal-body {
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   color: var(--text);
   font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
   font-size: 13px;
@@ -104,16 +104,16 @@ div.modal-win {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 4px 8px;
 }
 
 @media (orientation: portrait), (max-width: 768px) {
   div.modal-win {
-    width: 92vw !important;
-    max-width: 92vw !important;
+    width: 90vw !important;
+    max-width: 360px !important;
     max-height: 50vh !important;
   }
   .modal-body {
-    padding: 6px;
+    padding: 4px;
   }
 }

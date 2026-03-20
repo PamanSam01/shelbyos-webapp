@@ -6,17 +6,17 @@ div.upload-detail-win {
   border-left: 2px solid var(--border-light);
   border-right: 2px solid var(--border-dark);
   border-bottom: 2px solid var(--border-dark);
-  width: 480px !important;
-  max-width: 92vw !important;
+  width: 90vw !important;
+  max-width: 360px !important;
   font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
   overflow: hidden;
 }
 
 .upload-panel-body {
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   box-sizing: border-box;
 }
 
@@ -31,14 +31,14 @@ div.up-file-list {
   border-right: 2px solid var(--border-light);
   border-bottom: 2px solid var(--border-light);
   background: var(--input-bg);
-  padding: 4px;
+  padding: 2px;
 }
 
 .up-file-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 7px;
+  padding: 2px 5px;
   background: var(--panel);
   border-top: 1px solid var(--border-light);
   border-left: 1px solid var(--border-light);
@@ -80,7 +80,7 @@ div.up-file-list {
   flex-shrink: 0;
   cursor: pointer;
   border: 1px solid var(--border-mid);
-  padding: 1px 4px;
+  padding: 0px 3px;
   background: var(--panel);
 }
 
@@ -124,13 +124,19 @@ div.up-file-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 6px;
-  padding: 6px 0px;
+  gap: 4px;
+  padding: 2px 0px;
+}
+
+.up-actions button {
+  padding: 3px 10px;
+  font-size: 11px;
 }
 
 @media (max-width: 680px) {
   div.upload-detail-win {
-    width: 92vw !important;
+    width: 90vw !important;
+    max-width: 360px !important;
   }
   .up-actions {
     justify-content: flex-start;

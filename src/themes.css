@@ -75,6 +75,27 @@ body.theme-xp .statusbar-item:hover {
   background: linear-gradient(180deg, #ffffff 0%, #eae7d8 100%);
 }
 
+/* XP mobile card tints */
+@media (max-width: 768px) {
+  body.theme-xp .statusbar {
+    background: linear-gradient(180deg, #f0ede0 0%, #ece9d8 100%) !important;
+    border: 1px solid #c0c0c0 !important;
+    border-top-color: #ffffff !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+  }
+  body.theme-xp .statusbar-item {
+    background: rgba(49, 106, 197, 0.05) !important;
+    border: 1px solid rgba(49, 106, 197, 0.1) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+    border-radius: 4px !important;
+  }
+  body.theme-xp .statusbar-item.rpc-item {
+    background: rgba(49, 106, 197, 0.1) !important;
+    border: 1px solid rgba(49, 106, 197, 0.2) !important;
+    box-shadow: 0 2px 6px rgba(49, 106, 197, 0.15) !important;
+  }
+}
+
 /* ════════════════════════════════════════════════
    THEME: Terminal (Matrix)
    ════════════════════════════════════════════════ */
@@ -154,6 +175,26 @@ body.theme-terminal .statusbar {
   color: #00ff41;
 }
 
+/* Terminal mobile card tints */
+@media (max-width: 768px) {
+  body.theme-terminal .statusbar {
+    background: linear-gradient(180deg, #0a0a0a 0%, #000000 100%) !important;
+    border: 1px solid rgba(0, 255, 65, 0.25) !important;
+    border-top-color: rgba(0, 255, 65, 0.45) !important;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.1) !important;
+  }
+  body.theme-terminal .statusbar-item {
+    background: rgba(0, 255, 65, 0.03) !important;
+    border: 1px solid rgba(0, 255, 65, 0.1) !important;
+    box-shadow: inset 0 0 10px rgba(0, 255, 65, 0.02) !important;
+  }
+  body.theme-terminal .statusbar-item.rpc-item {
+    background: rgba(0, 255, 65, 0.06) !important;
+    border: 1px solid rgba(0, 255, 65, 0.3) !important;
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.15) !important;
+  }
+}
+
 /* ════════════════════════════════════════════════
    THEME: Neon Web3
    ════════════════════════════════════════════════ */
@@ -217,6 +258,26 @@ body.theme-neon .statusbar {
   background: linear-gradient(180deg, #0d0d20 0%, #0a0a1a 100%);
   border-top: 1px solid rgba(76, 29, 149, 0.8);
   color: #a78bfa;
+}
+
+/* Neon mobile card tints */
+@media (max-width: 768px) {
+  body.theme-neon .statusbar {
+    background: linear-gradient(180deg, #121225 0%, #050510 100%) !important;
+    border: 1px solid rgba(124, 58, 237, 0.3) !important;
+    border-top-color: rgba(124, 58, 237, 0.5) !important;
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.15), 0 4px 15px rgba(0,0,0,0.4) !important;
+  }
+  body.theme-neon .statusbar-item {
+    background: rgba(124, 58, 237, 0.04) !important;
+    border: 1px solid rgba(124, 58, 237, 0.12) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+  }
+  body.theme-neon .statusbar-item.rpc-item {
+    background: rgba(124, 58, 237, 0.08) !important;
+    border: 1px solid rgba(124, 58, 237, 0.4) !important;
+    box-shadow: 0 0 15px rgba(124, 58, 237, 0.2), 0 4px 10px rgba(0,0,0,0.2) !important;
+  }
 }
 
 body.theme-neon .progress95-bar {

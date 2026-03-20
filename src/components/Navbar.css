@@ -139,7 +139,10 @@
 
 @media (max-width: 768px) {
   .nav { 
-    justify-content: flex-start;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
     padding: 12px 16px; 
     gap: 8px;
   }
@@ -158,24 +161,26 @@
     width: auto; 
     justify-content: flex-end; 
     gap: 12px;
+    white-space: nowrap;
   }
 
-  /* Controls Section Mobile Layout (Single-Line Flexbox) */
+  /* Controls Section Mobile Layout (Horizontal Scroll / Visible Dropdown) */
   .header-controls { 
     order: 3;
     width: 100%; 
     display: flex !important;
-    flex-direction: row !important;
     flex-wrap: nowrap !important;
-    justify-content: flex-end !important;
-    align-items: center !important;
-    gap: 10px !important;
-    white-space: nowrap !important;
+    gap: 6px !important;
     padding-top: 12px; 
-    margin-top: 8px; 
+    margin-top: 4px; 
     border-top: 1px solid rgba(255,255,255,0.15); 
-    overflow: visible !important;
-    min-width: 0;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    white-space: nowrap !important;
+  }
+  
+  .header-controls > * {
+    flex: 0 0 auto;
   }
   
   .navControl {
@@ -194,12 +199,14 @@
     display: none;
   }
 
-  .header-controls .select95 {
+  .header-controls .select95,
+  .header-controls .btn95 {
     width: auto !important;
     max-width: none !important;
-    min-height: 36px;
-    font-size: 13px;
-    padding: 4px 8px;
+    min-height: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
   }
 
   .header-controls .theme-select {

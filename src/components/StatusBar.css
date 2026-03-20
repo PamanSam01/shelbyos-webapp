@@ -1,50 +1,57 @@
 /* src/components/StatusBar.css */
 
+/* Base root variables (Shared or Fallback) */
 .statusbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
   z-index: 1000;
   font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-  
-  /* Fallback base styles — overriden by theme */
+  color: #111;
   background: #f8f9fa;
   border-top: 1px solid #e5e7eb;
-  color: #111;
 }
 
-.statusbar-item {
-  display: flex;
-  align-items: center;
-  gap: 4px; /* Reduced gap between text elements */
-  padding: 0 16px;
-  border-right: 1px solid rgba(0,0,0,0.1);
-  height: 100%;
-  cursor: default;
-  transition: background 0.15s, opacity 0.15s;
-}
+@media (min-width: 769px) {
+  .statusbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .statusbar-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 16px;
+    border-right: 1px solid rgba(0,0,0,0.1);
+    height: 100%;
+    cursor: default;
+    transition: background 0.15s, opacity 0.15s;
+  }
 
-.statusbar-item:hover {
-  background: rgba(255, 255, 255, 0.15);
-  opacity: 1; /* Reset any dimmed opacity */
-}
+  .statusbar-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
 
-.statusbar-item:first-child {
-  padding-left: 0;
+  .statusbar-item:first-child {
+    padding-left: 0;
+  }
+
+  .statusbar-credits {
+    margin-left: auto;
+  }
 }
 
 .statusbar .icon {
-  font-size: 13px; /* Requested 12-14px range */
+  font-size: 13px;
   margin-right: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.85; /* Blend better with the theme */
+  opacity: 0.85;
 }
 
 /* Typography Hierarchy */
@@ -61,8 +68,6 @@
 }
 
 /* RPC Indicator System */
-
-
 .rpc-indicator {
   display: flex;
   align-items: center;
@@ -94,7 +99,6 @@
 }
 
 .statusbar-credits {
-  margin-left: auto;
   font-size: 11px;
   opacity: 0.75;
 }
@@ -110,50 +114,161 @@
   opacity: 1;
 }
 
-/* ─────────────────────────────────────────────────
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    MOBILE / PORTRAIT RESPONSIVE
-───────────────────────────────────────────────── */
-@media (orientation: portrait), (max-width: 680px) {
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+
+/* ---------------------------------------------------
+   MOBILE (max-width: 768px) — Panel system matching Actions/Upload
+--------------------------------------------------- */
+
+
+/* ---------------------------------------------------
+   MOBILE (max-width: 768px) — Refined SaaS Panel with Depth
+--------------------------------------------------- */
+@media (max-width: 768px) {
   .statusbar {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    height: auto;
-    padding: 8px 12px;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px 10px !important;
+    padding: 14px 12px !important;
+    position: static !important;
+    width: 100% !important;
+    margin-top: 12px !important;
+    z-index: auto !important;
+
+    /* Theme-integrated depth: subtle gradient + soft border + shadow */
+    background: linear-gradient(180deg, 
+      var(--panel, rgba(236,233,216,0.92)) 0%, 
+      var(--bg-card, rgba(236,233,216,1)) 100%) !important;
+    border: 1px solid var(--border-mid, rgba(0,0,0,0.1)) !important;
+    border-top-color: var(--border-light, #fff) !important;
+    box-shadow: 
+      0 4px 12px rgba(0,0,0,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.4) !important;
+    border-radius: 8px !important;
   }
-  
+
+  /* Inner cards — Layered depth using opacity and soft shadows */
   .statusbar-item {
-    border-right: none;
-    padding: 4px 0;
-    height: auto;
-    border-bottom: 1px solid rgba(0,0,0,0.05); /* subtle horizontal separator */
+    display: grid !important;
+    grid-template-columns: min-content 1fr !important;
+    align-items: center !important;
+    justify-content: start !important;
+    background: rgba(128, 128, 128, 0.05) !important;
+    border: 1px solid rgba(128, 128, 128, 0.1) !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    border-radius: 6px !important;
+    padding: 12px !important;
+    width: auto !important;
+    height: auto !important;
+    word-break: break-word !important;
+    transition: transform 0.2s ease, background 0.2s ease !important;
   }
 
-  /* Grid assignment */
-  .statusbar-item:nth-child(1) { grid-column: 1; }
-  .statusbar-item:nth-child(2) { grid-column: 2; border-left: 1px solid rgba(0,0,0,0.05); padding-left: 12px; }
-  
-  .statusbar-item:nth-child(3) { grid-column: 1; }
-  .statusbar-item:nth-child(4) { grid-column: 2; border-left: 1px solid rgba(0,0,0,0.05); padding-left: 12px; }
-  
-  .statusbar-item:nth-child(5) { grid-column: 1 / -1; justify-content: center; border-bottom: none; padding-top: 8px; }
-
-  .statusbar-credits {
-    grid-column: 1 / -1;
-    text-align: center;
-    border-top: 1px solid rgba(0,0,0,0.1);
-    padding-top: 8px;
-    margin-top: 4px;
-    margin-left: 0;
-    width: 100%;
-    font-size: 10px;
-    justify-content: center;
+  .statusbar-item:hover {
+    transform: translateY(-1px) !important;
+    background: rgba(128, 128, 128, 0.08) !important;
   }
-}
 
-@media (max-width: 380px) {
+  /* Hierarchy Tiers */
+  /* Tier 3: Files/Size — most subtle */
   .statusbar-item:nth-child(1),
   .statusbar-item:nth-child(2) {
-    display: none; /* Hide Files & Size on tiny screens */
+    opacity: 0.8 !important;
+    background: rgba(128, 128, 128, 0.03) !important;
+  }
+
+  /* Icons */
+  .statusbar-item .icon {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    display: inline-flex !important;
+    font-size: 11px !important;
+    margin-right: 8px !important;
+    opacity: 0.8 !important;
+  }
+
+  /* Text elements */
+  .statusbar .label {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    font-size: 10px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.6px !important;
+    opacity: 0.6 !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+    font-weight: 600 !important;
+  }
+
+  .statusbar .value {
+    grid-column: 1 / span 2 !important;
+    grid-row: 2 !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    margin: 6px 0 0 0 !important;
+    line-height: 1.2 !important;
+    color: var(--text, inherit) !important;
+  }
+
+  /* Tier 1: RPC — prominent panel with accent border/glow */
+  .statusbar-item.rpc-item {
+    grid-column: 1 / -1 !important;
+    background: rgba(128, 128, 128, 0.1) !important;
+    border: 1px solid rgba(128, 128, 128, 0.2) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.04) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    padding: 14px !important;
+  }
+
+  .statusbar-item.rpc-item .icon {
+    display: none !important;
+  }
+
+  .statusbar-item.rpc-item .label {
+    font-size: 11px !important;
+    margin: 0 !important;
+    font-weight: 600 !important;
+    opacity: 0.7 !important;
+  }
+
+  .statusbar-item.rpc-item .rpc-indicator {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+  }
+
+  .statusbar-item.rpc-item .rpc-indicator .value {
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+  }
+
+  .statusbar-item.rpc-item .rpc-dot {
+    width: 10px !important;
+    height: 10px !important;
+    box-shadow: 0 0 8px currentColor !important;
+    border-radius: 50% !important;
+  }
+
+  .statusbar-credits {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    text-align: center !important;
+    border-top: 1px solid rgba(128, 128, 128, 0.1) !important;
+    padding-top: 12px !important;
+    margin-top: 8px !important;
+    margin-left: 0 !important;
+    font-size: 11px !important;
+    justify-content: center !important;
+    opacity: 0.5 !important;
   }
 }
