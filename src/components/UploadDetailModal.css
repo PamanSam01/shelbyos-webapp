@@ -1,31 +1,31 @@
 /* src/components/UploadDetailModal.css */
 
-.upload-detail-win {
+div.upload-detail-win {
   background: var(--panel);
   border-top: 2px solid var(--border-light);
   border-left: 2px solid var(--border-light);
   border-right: 2px solid var(--border-dark);
   border-bottom: 2px solid var(--border-dark);
-  width: 480px;
-  max-width: 92vw;
+  width: 480px !important;
+  max-width: 92vw !important;
   font-family: 'Tahoma', 'Segoe UI', Arial, sans-serif;
   overflow: hidden;
 }
 
 .upload-panel-body {
-  padding: 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   box-sizing: border-box;
 }
 
-.up-file-list {
+div.up-file-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px;
-  overflow-y: auto;
+  max-height: 90px !important;
+  overflow-y: auto !important;
   border-top: 2px solid var(--border-dark);
   border-left: 2px solid var(--border-dark);
   border-right: 2px solid var(--border-light);
@@ -105,7 +105,8 @@
   border-left: 2px solid var(--border-dark);
   border-right: 2px solid var(--border-light);
   border-bottom: 2px solid var(--border-light);
-  height: 14px;
+  height: 6px;
+  border-radius: 6px;
   overflow: hidden;
   margin-top: 4px;
 }
@@ -123,13 +124,13 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 5px;
-  margin-top: 4px;
+  gap: 6px;
+  padding: 6px 0px;
 }
 
 @media (max-width: 680px) {
-  .upload-detail-win {
-    width: 96vw !important;
+  div.upload-detail-win {
+    width: 92vw !important;
   }
   .up-actions {
     justify-content: flex-start;

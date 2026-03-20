@@ -1,4 +1,5 @@
 import React from 'react';
+import { debugError } from '../utils/logger';
 
 interface Props {
   children: React.ReactNode;
@@ -24,7 +25,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    console.error('[ShelbyOS] Uncaught render error:', error, info);
+    debugError('[ShelbyOS] Uncaught render error:', error, info);
   }
 
   render() {

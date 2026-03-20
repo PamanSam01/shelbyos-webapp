@@ -1,7 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk"
-import { formatTokenBalance } from './utils/file'
+import { Aptos, AptosConfig, Network, type AptosSettings } from "@aptos-labs/ts-sdk"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ShelbyClientProvider, useUploadBlobs } from "@shelby-protocol/react"
+import { ShelbyClient } from "@shelby-protocol/sdk/browser"
+
+import { formatTokenBalance, formatFileSize } from './utils/file'
+import { debugLog, debugWarn, debugError } from './utils/logger'
 import Navbar from './components/Navbar'
 import VaultTable from './components/VaultTable'
 import type { StoredFile } from './components/VaultTable'
@@ -22,19 +27,17 @@ import { NETWORKS } from './config/networks'
 import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
+import { fetchBlobsFromGraphQL, fetchRecentActivitiesFromGraphQL } from './services/shelbyService'
 
-const API_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-if (!API_KEY) {
-  console.error("ShelbyNet API key missing. Check .env configuration.");
-}
+const queryClient = new QueryClient();
 
-
-function App() {
-  const { connect, disconnect, account, connected, network, signAndSubmitTransaction } = useWallet()
-
-  // Theme & Network
-  const [theme, setTheme] = useState('theme-xp')
-  const [activeNetKey, setActiveNetKey] = useState<keyof typeof NETWORKS>('testnet')
+function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
+  activeNetKey: keyof typeof NETWORKS,
+  setActiveNetKey: (key: keyof typeof NETWORKS) => void,
+  theme: string,
+  setTheme: (t: string) => void
+}) {
+  const { connect, disconnect, account, connected, signAndSubmitTransaction } = useWallet()
   
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
@@ -89,156 +92,126 @@ function App() {
   
   const [toast, setToast] = useState({ message: '', type: 'info' as ToastType, isVisible: false })
 
-  // No changes needed here, keeping existing logs if any
-
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
+
+  // Aptos SDK client
+  const aptos = useMemo(() => {
+    try {
+      const config = new AptosConfig({
+        network: ACTIVE_NET.network,
+        fullnode: ACTIVE_NET.aptosRpc,
+      });
+      return new Aptos(config);
+    } catch (err) {
+      debugError("Aptos SDK Initialization Error:", err);
+      return new Aptos(new AptosConfig({ network: Network.TESTNET }));
+    }
+  }, [ACTIVE_NET]);
+
+  // SDK Hooks
+  const uploadBlobsMutation = useUploadBlobs({
+    onSuccess: () => {
+      addLog('DONE', 'Upload batch completed and confirmed on-chain!');
+      showToast('Files uploaded successfully ✓', 'success');
+      setIsUploading(false);
+      setUploadQueue([]);
+      setOverallProgress(100);
+      setStatusLine('✓ Upload complete');
+      setTimeout(() => {
+        setIsUploadDetailModalOpen(false);
+        setStatusLine('');
+        fetchVaultHistory();
+      }, 2000);
+    },
+    onError: (err: any) => {
+      const msg = err.message || 'Upload failed';
+      if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
+        debugLog('Upload cancelled by user');
+      } else {
+        debugError('Upload Error:', err);
+        addLog('ERR ', msg);
+        showToast(msg, 'error');
+      }
+      setIsUploading(false);
+      setStatusLine('⚠ Upload failed');
+    }
+  });
+
 
   // Helper: Fetch vault history from Aptos REST API (no auth needed, pagination supported)
   const fetchVaultHistory = useCallback(async () => {
-    if (!walletAddress || !ACTIVE_NET) {
-      return;
-    }
-
+    if (!walletConnected || !walletAddress) return;
+    
     setIsHistoryLoading(true);
     setHistoryError(null);
+    debugLog("activeNetKey:", activeNetKey);
 
     try {
-      // Normalize wallet address to full 64-char padded hex
-      let addr = walletAddress.toLowerCase();
-      const rawHex = addr.startsWith('0x') ? addr.slice(2) : addr;
-      addr = '0x' + rawHex.padStart(64, '0');
-
-      // 1. Try GraphQL Indexer First (Source of Truth)
       const indexerUrl = ACTIVE_NET.shelbyIndexer;
-      let apiKey = '';
-      if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
-      if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
-
-      if (!indexerUrl || !apiKey) {
-        setFiles([]);
-        return;
-      }
-
-      const currentMicros = String(Date.now() * 1000);
-      const query = `
-        query getBlobs($where: blobs_bool_exp) {
-          blobs(where: $where) {
-            blob_name
-            size
-            created_at
-            expires_at
-            is_deleted
-            is_written
-          }
-        }
-      `;
-      const variables = {
-        where: {
-          owner: { _eq: addr },
-          is_deleted: { _eq: "0" },
-          expires_at: { _gte: currentMicros }
-        }
-      };
-
-      const res = await fetch(indexerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ query, variables })
-      });
-
-      const json = await res.json();
-      if (json.errors) throw new Error(json.errors[0]?.message || 'GraphQL Error');
-
-      const rawBlobs: any[] = json.data?.blobs || [];
-      const accountBlobs = rawBlobs.filter((b: any) =>
-        Number(b.is_written) === 1 && Number(b.is_deleted) === 0
-      );
-
-      const history: StoredFile[] = accountBlobs.map((blob: any) => {
-        const blobName: string = blob.blob_name || 'Unknown';
-        const tsMicro = parseInt(blob.created_at) || 0;
-        const d = tsMicro > 0 ? new Date(tsMicro / 1000) : new Date();
-        const ext = blobName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'BIN';
-        return {
-          id: tsMicro || Math.random(),
-          name: blobName,
-          ext,
-          size: parseInt(blob.size) || 0,
-          date: d.toISOString().split('T')[0],
-          time: d.toTimeString().slice(0, 5),
-          uploader: addr,
-          status: 'stored' as const,
-          vis: 'public' as any,
-          permConfig: { type: 'public' as const, allowlist: [], timelock: '', price: '' },
-          network: ACTIVE_NET.label,
-          cid: blobName,
-          txHash: '',
-        };
-      });
-
-      history.sort((a, b) => b.id - a.id);
+      const apiKey = activeNetKey === 'testnet' ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
       
-      const historyWithPerms = history.map(f => {
-        const storageKey = `shelbyos_perm_${addr}/${f.name}`;
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-          try {
-            const savedConfig = JSON.parse(saved);
-            return { ...f, permConfig: savedConfig, vis: savedConfig.type === 'public' ? 'public' : savedConfig.type === 'allowlist' ? 'private' : 'encrypted' as any };
-          } catch { /* ignore */ }
-        }
-        return f;
-      });
+      if (!indexerUrl || !apiKey) return;
 
-      setFiles(historyWithPerms);
-
+      const data = await fetchBlobsFromGraphQL(indexerUrl, apiKey, walletAddress);
+      debugLog("GRAPHQL BLOBS DEBUG:", JSON.stringify(data, null, 2));
+      
+      const blobs = data?.data?.blobs || [];
+      if (blobs) {
+        const mappedFiles: StoredFile[] = blobs.map((item: any, idx: number) => {
+          // Parse blob_name to get clean filename (handle potential path prefixes)
+          const rawName = item.blob_name || "";
+          const cleanName = rawName.split("/").pop() || `Blob ${idx + 1}`;
+          
+          const dotIndex = cleanName.lastIndexOf('.');
+          const ext = dotIndex !== -1 ? cleanName.slice(dotIndex + 1).toUpperCase() : "TXT";
+          
+          return {
+            id: idx + 1, // Use loop index for UI consistency as "id" is not in schema
+            name: cleanName,
+            ext: ext,
+            size: item.size || 0,
+            date: item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown',
+            status: 'stored',
+            vis: 'public',
+            uploader: item.owner || 'anonymous',
+            blobId: rawName // Use raw blob_name as the internal identifier
+          };
+        });
+        setFiles(mappedFiles);
+      }
     } catch (err: any) {
-      console.warn('[Vault] Sync failed:', err.message);
-      setHistoryError(err.message);
+      debugError("[Vault] History fetch error:", err);
+      setHistoryError(err.message || "Failed to load history");
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [walletAddress, ACTIVE_NET]);
+  }, [walletConnected, walletAddress, activeNetKey, ACTIVE_NET.shelbyIndexer]);
 
   const fetchActivities = useCallback(async () => {
-    if (!walletAddress || !ACTIVE_NET) return;
-    const indexerUrl = ACTIVE_NET.shelbyIndexer;
-    let apiKey = '';
-    if (ACTIVE_NET.label === 'Testnet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_TESTNET || '';
-    if (ACTIVE_NET.label === 'ShelbyNet') apiKey = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET || '';
-    if (!indexerUrl || !apiKey) return;
+    if (!walletConnected || !walletAddress) return;
+    debugLog("activeNetKey:", activeNetKey);
 
     try {
-      const query = `
-        query getActivities($where: blob_activities_bool_exp) {
-          blob_activities(where: $where, order_by: { timestamp: desc }, limit: 20) {
-            blob_name
-            type
-            timestamp
-            transaction_hash
-          }
-        }
-      `;
-      const variables = { where: { account_address: { _eq: walletAddress.toLowerCase() } } };
-      const res = await fetch(indexerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ query, variables })
-      });
-      const json = await res.json();
-      const raw = json.data?.blob_activities || [];
-      // Synced to terminal below
+      const indexerUrl = ACTIVE_NET.shelbyIndexer;
+      const apiKey = activeNetKey === 'testnet' ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+      
+      if (!indexerUrl || !apiKey) return;
 
-      // Sync activities to terminal logs as "EVENTS"
-      raw.forEach((act: any) => {
-        const date = new Date(parseInt(act.timestamp) / 1000).toLocaleTimeString();
-        const type = String(act.type).toUpperCase();
-        addLog('EVNT', `${date} | ${type}: ${act.blob_name.split('/').pop()}`);
-      });
-    } catch (err) {
-      console.warn("[Vault] Failed to fetch activities:", err);
+      const data = await fetchRecentActivitiesFromGraphQL(indexerUrl, apiKey, 5);
+      debugLog("GRAPHQL ACTIVITIES DEBUG:", JSON.stringify(data, null, 2));
+      
+      const blobs = data?.data?.blobs;
+      if (blobs) {
+        blobs.forEach((item: any, idx: number) => {
+          const date = item.created_at ? new Date(item.created_at).toLocaleTimeString() : 'Unknown';
+          const name = item.blob_name || `BLOB_${idx}`;
+          addLog('EVNT', `${date} | STORED: ${name.slice(0, 16)}...`);
+        });
+      }
+    } catch (err: any) {
+      debugWarn("[Vault] Activities indexer error:", err.message);
     }
-  }, [walletAddress, ACTIVE_NET, addLog]);
+  }, [walletConnected, walletAddress, activeNetKey, ACTIVE_NET.shelbyIndexer]);
 
   useEffect(() => {
     if (walletConnected) {
@@ -255,37 +228,6 @@ function App() {
     return () => clearInterval(pollInterval);
   }, [walletConnected, walletAddress, fetchVaultHistory]);
 
-  // Initialize Aptos SDK client
-  const aptos = useMemo(() => {
-    try {
-      const config = new AptosConfig({
-        network: ACTIVE_NET.network,
-        fullnode: ACTIVE_NET.aptosRpc,
-      });
-      return new Aptos(config);
-    } catch (err) {
-      console.error("Aptos SDK Initialization Error:", err);
-      // Fallback: Default to Testnet to prevent blank screen
-      return new Aptos(new AptosConfig({ network: "testnet" as any }));
-    }
-  }, [ACTIVE_NET]);
-
-  // Defensive Guard: prevent blank screen if network config is missing or wallet not connected
-  if (!ACTIVE_NET) {
-    return (
-      <div style={{ padding: '20px', fontFamily: 'Tahoma', background: '#ece9d8', border: '3px solid #003c74', margin: '50px' }}>
-        <h2 style={{ color: '#cc0000' }}>⚠️ Network Configuration Error</h2>
-        <p>Could not initialize Shelby network configuration.</p>
-        <button className="btn95" onClick={() => window.location.reload()}>Retry</button>
-      </div>
-    );
-  }
-
-  // Handle case where session is not fully ready
-  if (!walletConnected && !isWalletModalOpen && files.length === 0) {
-     // Initial state is okay, but if something crashes we want a fallback
-  }
-
   // Handlers
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type, isVisible: true })
@@ -295,16 +237,17 @@ function App() {
   const rpcFetch = useCallback(async (url: string) => {
     // Detect Shelby RPC requests
     if (url.includes("shelby.xyz")) {
+      // Authentication removed project-wide for public access
+
       return fetch(url, {
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
           "Content-Type": "application/json"
         }
       });
     }
     // Normal fetch for Aptos RPC or other endpoints
     return fetch(url);
-  }, []);
+  }, [activeNetKey]);
 
   const checkRpcHealth = useCallback(async () => {
     const rpc = ACTIVE_NET?.aptosRpc;
@@ -317,7 +260,7 @@ function App() {
     } catch {
       setRpcStatus("error");
     }
-  }, [ACTIVE_NET?.aptosRpc, rpcFetch, network?.name, activeNetKey, walletConnected]);
+  }, [ACTIVE_NET?.aptosRpc]);
 
   const fetchBalances = useCallback(async () => {
     if (!walletConnected || !walletAddress || !ACTIVE_NET) return;
@@ -360,7 +303,7 @@ function App() {
       }
 
     } catch (error: any) {
-      console.warn("Balance fetch error:", error?.message || error);
+      debugWarn("Balance fetch error:", error?.message || error);
       // Fallback cleanly — no blank screens
       setAptBalance("0");
       setShelbyBalance("0");
@@ -447,7 +390,7 @@ function App() {
           const isCoop = msg.includes('Cross-Origin') || msg.includes('window.closed') || msg.includes('COOP');
           if (isCoop) {
             // Popup may still succeed asynchronously — just warn, don't crash
-            console.warn('COOP warning (non-fatal):', msg);
+            debugWarn('COOP warning (non-fatal):', msg);
             showToast('Waiting for Google sign-in… (popup may be blocked)', 'info');
           } else if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
             showToast('Connection cancelled', 'info');
@@ -458,7 +401,7 @@ function App() {
       }
     } catch (err: any) {
       // Top-level safety net — prevent any blank screen
-      console.error('handleWalletSelect unexpected error:', err);
+      debugError('handleWalletSelect unexpected error:', err);
       showToast('Wallet connection error. Please try again.', 'error');
     } finally {
       setIsConnecting(false);
@@ -545,184 +488,52 @@ function App() {
     }
   }
 
-  async function uploadToShelby(file: File, account: string) {
-    // API key: ShelbyNet requires one, Testnet public endpoint does not
-    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-    const TESTNET_KEY   = import.meta.env.VITE_SHELBY_API_KEY_TESTNET; // optional
-    const isOnShelbyNet = activeNetKey === "shelbynet";
-
-    // Only block upload on ShelbyNet if key is missing
-    if (isOnShelbyNet && !SHELBYNET_KEY) {
-      showToast("ShelbyNet API key not configured", "error");
-      return { success: false, error: "Missing ShelbyNet API key" };
-    }
-
-    if (!ACTIVE_NET?.contract) {
-      showToast("Storage contract configuration missing", "error");
-      return { success: false, error: "contract_missing" };
-    }
-
-    if (!walletConnected || !walletAddress || !ACTIVE_NET) {
-      return { success: false, error: "wallet_not_initialized" };
-    }
-
-    try {
-      showToast(`Encoding ${file.name}...`, "info");
-      addLog('PROC', `Generating erasure coding for ${file.name}...`);
-      const {
-        generateCommitments,
-        createDefaultErasureCodingProvider,
-        ShelbyBlobClient,
-        ShelbyClient,
-        expectedTotalChunksets,
-      } = await import("@shelby-protocol/sdk/browser");
-
-      const provider = await createDefaultErasureCodingProvider();
-      const data = new Uint8Array(await file.arrayBuffer());
-      const commitments = await generateCommitments(provider, data);
-
-      showToast("Waiting for wallet approval...", "info");
-      addLog('AUTH', 'Awaiting wallet signature for contract transaction...');
-      const payload = ShelbyBlobClient.createRegisterBlobPayload({
-        deployer: ACTIVE_NET.contract as any,
-        account: account as any,
-        blobName: file.name,
-        blobMerkleRoot: commitments.blob_merkle_root,
-        numChunksets: expectedTotalChunksets(commitments.raw_data_size),
-        expirationMicros: (Date.now() + 1000 * 60 * 60 * 24 * 30) * 1000,
-        blobSize: commitments.raw_data_size,
-        encoding: 0,
-      });
-
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error("Transaction hash not found after submission");
-
-      showToast("Confirming on-chain registration...", "info");
-      addLog('TRAN', `TX submitted. Confirming hash: ${txHash.slice(0, 10)}...`);
-      await aptos.waitForTransaction({ transactionHash: txHash });
-      console.log("Blob registered on-chain:", txHash);
-
-      showToast("Uploading file to Shelby network...", "info");
-      addLog('SYNC', `Streaming raw data to Decentralized Vault Nodes...`);
-      const { Network } = await import("@aptos-labs/ts-sdk");
-
-      // Only pass apiKey for the network that requires auth
-      const shelbyClient = isOnShelbyNet
-        ? new ShelbyClient({
-            network: Network.SHELBYNET,
-            apiKey: SHELBYNET_KEY,
-            fullnode: ACTIVE_NET.aptosRpc,
-            shelbynode: ACTIVE_NET.shelbyRpc,
-          } as any)
-        : TESTNET_KEY
-        ? new ShelbyClient({ network: Network.TESTNET, apiKey: TESTNET_KEY } as any)
-        : new ShelbyClient({ network: Network.TESTNET } as any);
-
-      await shelbyClient.rpc.putBlob({
-        account: account as any,
-        blobName: file.name,
-        blobData: new Uint8Array(await file.arrayBuffer()),
-      });
-
-      console.log("Blob uploaded to Shelby RPC");
-      addLog('DONE', `${file.name} successfully encrypted and stored.`);
-      return { success: true, blobId: file.name, txHash };
-
-    } catch (err: any) {
-      console.error("Shelby upload pipeline error:", err);
-      const msg = err?.message || "upload_failed";
-      if (msg.includes("rejected") || msg.includes("cancel") || msg.includes("User denied")) {
-        showToast("Upload cancelled by user", "info");
-        addLog('ERR ', `Upload cancelled by user.`);
-      } else {
-        showToast(`Upload failed: ${msg.slice(0, 80)}`, "error");
-        addLog('ERR ', `Exception: ${msg.slice(0, 50)}`);
-      }
-      return { success: false, error: msg };
-    }
-  }
-
-
-  const handleUploadAll = async () => {
-    // Prevent concurrent calls
-    if (isUploading) return;
-    if (uploadQueue.length === 0) return;
-    
+  const handleUploadAll = useCallback(async () => {
+    if (isUploading || !uploadQueue.length) return;
     if (!walletConnected || !walletAddress) {
-      showToast('⚠ Connect a wallet first', 'error');
-      setIsUploadDetailModalOpen(false);
-      setIsWalletModalOpen(true);
+      showToast('Connect wallet to continue', 'error');
       return;
     }
-
-    const readyItems = uploadQueue.filter(q => q.status === 'ready');
-    if (!readyItems.length) return;
-
-    setIsUploading(true);
-    setOverallProgress(0);
-    setShowTerminal(true);
-    setUploadLogs([]);
-    addLog('INIT', `Initiating batch upload sequence for ${readyItems.length} file(s)...`);
-    const total = readyItems.length;
-    let done = 0;
-
-    for (const item of uploadQueue) {
-      if (item.status !== 'ready') continue;
-
-      item.status = 'uploading';
-      setStatusLine(`Uploading ${done + 1} / ${total}: ${item.file.name}`);
-      setUploadQueue([...uploadQueue]);
-
-      const result = await uploadToShelby(item.file, walletAddress);
-
-      if (result.success) {
-        const now = new Date();
-        const filePerm = item.permConfig || defaultPerm;
-
-        const newStoredFile: StoredFile = {
-          id: Date.now() + Math.random(),
-          name: item.file.name,
-          ext: (item.file.name.split('.').pop() || 'BIN').toUpperCase().slice(0,4),
-          size: item.file.size,
-          cid: result.blobId || item.file.name,
-          txHash: result.txHash || '',
-          status: 'stored',
-          vis: filePerm.type === 'public' ? 'public' : filePerm.type === 'allowlist' ? 'private' : 'encrypted',
-          permConfig: { ...filePerm },
-          previewUrl: URL.createObjectURL(item.file),
-          date: now.toISOString().split('T')[0],
-          time: now.toTimeString().slice(0,5),
-          uploader: walletAddress,
-          network: ACTIVE_NET?.label || 'Unknown',
-        };
-
-        setFiles(prev => [newStoredFile, ...prev]);
-        item.status = 'stored';
-        done++;
-        setOverallProgress(Math.round((done / total) * 100));
-        
-        // Refresh full history from Shelby API after successful upload
-        // Added small timeout to allow RPC/Indexer to catch up
-        setTimeout(() => fetchVaultHistory(), 1000);
-      } else {
-        item.status = 'ready';
-        showToast(`Upload failed: ${item.file.name}`, 'error');
-      }
-      setUploadQueue([...uploadQueue]);
-    }
-
-    setIsUploading(false);
-    addLog('DONE', `Batch sequence completed. ${done}/${total} successful.`);
-    setStatusLine(`✓ ${done} file${done !== 1 ? 's' : ''} uploaded to Shelby`);
-    if (done > 0) showToast(`${done} file${done !== 1 ? 's' : ''} uploaded successfully ✓`, 'success');
     
-    setTimeout(() => {
-      setUploadQueue([]);
-      setIsUploadDetailModalOpen(false);
-      setStatusLine('');
-    }, 1800);
-  }
+    setIsUploadDetailModalOpen(true);
+    setIsUploading(true);
+    setOverallProgress(10);
+    setStatusLine('Preparing files...');
+    setUploadLogs([]);
+    addLog('INIT', 'Starting batch upload...');
+
+    try {
+      addLog('PROC', 'Preparing batch data and encoding...');
+      const blobDatas = await Promise.all(uploadQueue.map(async item => ({
+          blobName: item.file.name,
+          blobData: new Uint8Array(await item.file.arrayBuffer())
+      })));
+
+      setStatusLine('Waiting for wallet approval...');
+      
+      const signer = (window as any).martian?.selectedAccount ? {
+        account: { address: (window as any).martian.selectedAccount.address },
+        signAndSubmitTransaction: (window as any).martian.signAndSubmitTransaction
+      } : {
+        account: account,
+        signAndSubmitTransaction: signAndSubmitTransaction
+      };
+
+      uploadBlobsMutation.mutate({
+        signer: signer as any,
+        blobs: blobDatas,
+        expirationMicros: (Date.now() + 86400000 * 30) * 1000 // 30 days
+      });
+
+    } catch (err: any) {
+      debugError("Batch upload sequence failed:", err);
+      const msg = err.message || "Sequence failed";
+      showToast(msg, 'error');
+      addLog('ERR ', msg);
+      setIsUploading(false);
+      setStatusLine('⚠ Failed');
+    }
+  }, [walletConnected, walletAddress, uploadQueue, account, signAndSubmitTransaction, uploadBlobsMutation, addLog]);
 
   const handleClearVault = () => {
     setFiles([])
@@ -751,11 +562,9 @@ function App() {
       const encodedName = encodeURIComponent(cleanName).replace(/%2F/g, '/');
       const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
       
-      const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      const headers: Record<string, string> = {};
-      if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
-        headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
-      }
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
 
       const res = await fetch(blobUrl, { headers });
       if (!res.ok) {
@@ -769,7 +578,7 @@ function App() {
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       showToast(`✓ ${f.name} downloaded`, 'success');
     } catch (err: any) {
-      console.error('[Vault] Download failed:', err);
+      debugError('[Vault] Download failed:', err);
       showToast(`Download failed: ${err?.message?.slice(0, 80) || 'unknown error'}`, 'error');
     }
   };
@@ -831,16 +640,14 @@ function App() {
 
     const encodedName = encodeURIComponent(cleanName).replace(/%2F/g, '/');
     const blobUrl = `${shelbyRpc}/v1/blobs/${addr}/${encodedName}`;
-    const SHELBYNET_KEY = import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-    const headers: Record<string, string> = {};
-    if (activeNetKey === 'shelbynet' && SHELBYNET_KEY) {
-      headers['Authorization'] = `Bearer ${SHELBYNET_KEY}`;
-    }
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
 
     try {
       const res = await fetch(blobUrl, { headers });
       if (!res.ok) {
-        console.warn(`[Vault] Preview fetch ${res.status} for ${f.name}`);
+        debugWarn(`[Vault] Preview fetch ${res.status} for ${f.name}`);
         return; // Modal already open, will just show "no preview" fallback
       }
       const arrayBuf = await res.arrayBuffer();
@@ -852,7 +659,7 @@ function App() {
       // Re-open to pass the new previewUrl
       _openPreviewModal({ ...f, previewUrl: objectUrl });
     } catch (err: any) {
-      console.warn('[Vault] Preview fetch error:', err?.message);
+      debugWarn('[Vault] Preview fetch error:', err?.message);
       // Modal already open without previewUrl — graceful fallback already handled
     }
   };
@@ -970,8 +777,7 @@ function App() {
   }
 
   // Defensive render guard
-  try {
-    return (
+  return (
       <div className="app-container">
         <Navbar 
           activeNetwork={activeNetKey}
@@ -1081,7 +887,7 @@ function App() {
 
       <StatusBar 
         fileCount={files?.length || 0}
-        totalSize={((files ?? []).reduce((a, b) => a + b.size, 0) / 1048576).toFixed(2) + ' MB'}
+        totalSize={formatFileSize((files ?? []).reduce((a, b) => a + Number(b.size || 0), 0))}
         walletStatus={walletConnected ? (String(walletAddress).slice(0, 6) + '...' + String(walletAddress).slice(-4)) : 'Not Connected'}
         networkStatus={ACTIVE_NET?.label || 'Unknown'}
         rpcStatus={rpcStatus}
@@ -1191,23 +997,47 @@ function App() {
           onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
         />
       </div>
-    )
-  } catch (err) {
-    console.error("React render failure", err);
-    return (
-      <div style={{ padding: 20, fontFamily: 'Tahoma', background: '#ece9d8', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="window" style={{ width: 'min(300px, 90vw)' }}>
-          <div className="titlebar"><span>Critical Error</span></div>
-          <div className="window-body">
-            <p>ShelbyOS failed to render. Reload the application.</p>
-            <button className="btn95" onClick={() => window.location.reload()}>Reload</button>
-          </div>
-        </div>
-      </div>
     );
-  }
 }
 
-export default App
-// submitTransaction removed: now using signAndSubmitTransaction directly for adapter wallets
+// Provider Wrapper
+export default function App() {
+  const [activeNetKey, setActiveNetKey] = useState<keyof typeof NETWORKS>('testnet')
+  const [theme, setTheme] = useState('theme-xp')
+  const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
+
+  const shelbyClient = useMemo(() => {
+    const apiKey = activeNetKey === 'testnet' 
+      ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET 
+      : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
+
+    const settings: AptosSettings = { 
+      network: ACTIVE_NET.network, 
+      fullnode: ACTIVE_NET.aptosRpc 
+    };
+
+    return new ShelbyClient({ 
+      network: ACTIVE_NET.network as any, 
+      aptos: settings,
+      indexer: { 
+        baseUrl: ACTIVE_NET.shelbyIndexer,
+        apiKey
+      },
+      rpc: { apiKey }
+    });
+  }, [ACTIVE_NET, activeNetKey]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ShelbyClientProvider client={shelbyClient}>
+        <ShelbyOS 
+          activeNetKey={activeNetKey} 
+          setActiveNetKey={setActiveNetKey}
+          theme={theme}
+          setTheme={setTheme}
+        />
+      </ShelbyClientProvider>
+    </QueryClientProvider>
+  )
+}
 

@@ -108,8 +108,8 @@ const ExpandableRow: React.FC<{
         <div className="exp-row-info">
           <div className="exp-row-top">
             <span className="ext-icon" style={{ background: extColor(file.ext) }}>{file.ext.slice(0, 2)}</span>
-            <div className="exp-row-name" title={file.name}>
-              {truncateName(file.name, 26)}
+            <div className="exp-row-name" title={file?.name || ""}>
+              {truncateName(file?.name || "Unknown", 26)}
             </div>
           </div>
           <div className="exp-row-meta">
@@ -189,10 +189,12 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
     return colors[ext.toUpperCase()] || '#5a5acd';
   };
 
-  const filteredFiles = files.filter(f =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    (!filterStatus || f.status === filterStatus)
-  );
+  const filteredFiles = files.filter(f => {
+    const name = f?.name || "";
+    const status = f?.status || "";
+    return name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+           (!filterStatus || status === filterStatus);
+  });
 
   useEffect(() => { setCurrentPage(1); setMobilePage(1); }, [searchQuery, filterStatus]);
 
@@ -343,16 +345,16 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
                     <tr key={s.id} className={`file-row ${checkedIds.has(s.id) ? 'selected' : ''}`} onClick={() => toggleCheck(s.id)}>
                       <td><input type="checkbox" checked={checkedIds.has(s.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleCheck(s.id)} /></td>
                       <td>
-                        <span className="ext-icon" style={{ background: extColor(s.ext) }}>{s.ext.slice(0, 2)}</span>
-                        {s.name}
+                        <span className="ext-icon" style={{ background: extColor(s?.ext || "TXT") }}>{(s?.ext || "TX").slice(0, 2)}</span>
+                        {s?.name || "Unknown"}
                         {s.vis === 'public' && s.status === 'stored' && <span className="badge badge-hot" style={{ marginLeft: '8px' }}>🔥 HOT</span>}
                         <span className={`badge badge-public interactive`} style={{ marginLeft: '6px', cursor: 'pointer' }} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
                         {s.network && <span className="badge badge-testnet" style={{ marginLeft: '6px' }}>{s.network}</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)' }}>{fmtSize(s.size)}</td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '12px' }}>{s.date || ''} {s.time || ''}</td>
-                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s.uploader || ''}>{shortenAddr(s.uploader || '')}</td>
-                      <td><span className={s.status === 'stored' ? 'badge badge-public' : 'badge badge-testnet'}>{s.status.toUpperCase()}</span></td>
+                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s?.uploader || ''}>{shortenAddr(s?.uploader || '')}</td>
+                      <td><span className={s?.status === 'stored' ? 'badge badge-public' : 'badge badge-testnet'}>{(s?.status || "pending").toUpperCase()}</span></td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button><span className="tiptext">Preview file</span></span>
                         <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button><span className="tiptext">Open in Shelby Explorer</span></span>

@@ -24,7 +24,7 @@ const Modal: React.FC<ModalProps> = ({
     <div className="modal-bg" onClick={onClose}>
       <div 
         className="modal-win" 
-        style={{ width: width || '440px' }} 
+        style={width ? { width } : {}} 
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >

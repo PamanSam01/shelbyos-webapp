@@ -16,8 +16,17 @@ export function getFileExtension(filename: string): string {
 }
 
 /**
- * Formats bytes into a human-readable MB string.
+ * Formats raw bytes into human-readable sizes (B, KB, MB, GB).
+ * Automatically parses strings to numbers to avoid scientific notation bugs.
  */
-export function formatToMB(bytes: number): string {
-  return (bytes / 1048576).toFixed(2) + ' MB';
+export function formatFileSize(bytes: number | string): string {
+  const size = Number(bytes) || 0;
+  if (size === 0) return '0 B';
+  
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  // Ensure we don't go out of bounds on massive numbers
+  const i = Math.min(Math.floor(Math.log(size) / Math.log(k)), sizes.length - 1);
+  
+  return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }

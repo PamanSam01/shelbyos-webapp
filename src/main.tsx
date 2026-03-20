@@ -13,6 +13,15 @@ import "./index.css";
 import App from "./App";
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Silences all console output in production to ensure a clean console
+if (!import.meta.env.DEV) {
+  console.log = () => {};
+  console.info = () => {};
+  console.warn = () => {};
+  console.debug = () => {};
+  console.error = () => {}; // Mutes fetch error spam
+}
+
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
     <AptosWalletAdapterProvider

@@ -76,9 +76,8 @@ const UploadDetailModal: React.FC<UploadDetailModalProps> = ({
       onClose={onClose} 
       title="File Details" 
       icon="📄" 
-      width="480px"
     >
-      <div className="upload-panel-body" style={{ padding: 0 }}>
+      <div className="upload-panel-body">
         {/* File queue list */}
         <div className="up-file-list">
           {queue.length === 0 ? (
@@ -146,7 +145,7 @@ const UploadDetailModal: React.FC<UploadDetailModalProps> = ({
           <div className="up-progress-wrap" style={{ display: 'block' }}>
             <div 
               className="up-progress-bar" 
-              style={{ width: `${overallProgress}%` }}
+              style={{ width: `${Math.min(Math.max(overallProgress, 0), 100)}%` }}
             ></div>
           </div>
         )}
