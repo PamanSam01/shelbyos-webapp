@@ -824,13 +824,26 @@
   .intro-copyright { font-size: 10px; bottom: 12px; white-space: normal; text-align: center; width: 90vw; }
 }
 @media (max-width: 600px) {
-  .logo-panel { padding: 20px 20px 15px; }
-  .os-title { font-size: clamp(32px, 12vw, 42px); }
-  .os-subtitle { letter-spacing: 2px; font-size: 11px; }
-  .progress-panel { padding: 15px 20px; }
-  .enter-panel { padding: 15px 20px 20px; }
-  .terminal-body { padding: 8px 12px; font-size: 11px; }
-  .status-grid { grid-template-columns: 1fr; gap: 4px; }
+  .logo-panel { padding: 16px 16px 12px; }
+  .shelby-logo { width: 42px; height: 42px; margin-bottom: 12px; }
+  .os-title { font-size: clamp(24px, 10vw, 32px); }
+  .os-subtitle { letter-spacing: 1.5px; font-size: 10px; margin-top: 4px; }
+  .progress-panel { padding: 10px 16px; gap: 6px; }
+  .xp-bar-track { height: 16px; }
+  .progress-label { font-size: 9px; }
+  .terminal-titlebar { padding: 3px 8px; font-size: 9px; }
+  .terminal-body { 
+    padding: 6px 10px; 
+    font-size: 10px; 
+    min-height: 80px; 
+    max-height: 100px; 
+  }
+  .status-panel { padding: 8px 14px; font-size: 9px; }
+  .status-header { font-size: 8px; margin-bottom: 6px; }
+  .status-grid { grid-template-columns: 1fr; gap: 2px; }
+  .enter-panel { padding: 12px 16px 16px; gap: 10px; }
+  .status-text { font-size: 10px; min-height: 14px; }
+  .enter-btn-inner { padding: 8px 20px; font-size: 12px; }
 }
 
 /* Fill space on high-resolution tall portrait monitors (e.g., 1080x1920) */
