@@ -4,21 +4,13 @@ import './Intro.css';
 
 interface IntroProps {
   onComplete: () => void;
+  walletConnected?: boolean;
+  activeNetName?: string;
+  rpcUrl?: string;
+  fetchVaultHistory?: () => Promise<void>;
 }
 
-const steps = [
-  { pct: 8,   tag: 'BOOT',  msg: 'ShelbyOS Web3 Kernel v1.2',               barDuration: 400  },
-  { pct: 18,  tag: 'INIT',  msg: 'Connecting to Aptos Mainnet RPC...',      barDuration: 700  },
-  { pct: 32,  tag: 'SYNC',  msg: 'Synchronizing ShelbyNet file index...',   barDuration: 850  },
-  { pct: 45,  tag: 'AUTH',  msg: 'Initializing Wallet Adapter...',           barDuration: 600  },
-  { pct: 58,  tag: 'OK',    msg: 'Aptos blockchain connection established.', barDuration: 550  },
-  { pct: 70,  tag: 'SECR',  msg: 'Verifying Smart Contract permissions...', barDuration: 750  },
-  { pct: 82,  tag: 'BLOC',  msg: 'Fetching on-chain transaction logs...',   barDuration: 800  },
-  { pct: 92,  tag: 'LOAD',  msg: 'Loading Decentralized Vault UI...',       barDuration: 500  },
-  { pct: 100, tag: 'READY', msg: 'ShelbyOS Web3 environment ready.',         barDuration: 900  },
-];
-
-const Intro: React.FC<IntroProps> = ({ onComplete }) => {
+const Intro: React.FC<IntroProps> = ({ onComplete, walletConnected = false, activeNetName = 'Aptos Mainnet', rpcUrl = '', fetchVaultHistory }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const termLogRef = useRef<HTMLDivElement>(null);
   const barFillRef = useRef<HTMLDivElement>(null);
@@ -31,7 +23,6 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
   const scanFlashRef = useRef<HTMLDivElement>(null);
 
   const [logs, setLogs] = useState<{tag: string, msg: string, time: string, typed: string}[]>([]);
-  const [currentStep, setCurrentStep] = useState(0);
   const [bootReady, setBootReady] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [statusText, setStatusText] = useState('Initializing Web3 Kernel...');
@@ -66,11 +57,23 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
   const handleSkip = () => {
     if (bootReady || isExiting) return;
     setBootReady(true);
-    setCurrentStep(steps.length - 1);
     setStatusText('Sequence Skipped. Ready.');
     if (barFillRef.current) barFillRef.current.style.width = '100%';
     if (barPctRef.current) barPctRef.current.textContent = '100%';
-    showDiagnostics();
+    
+    // Auto-reveal diagnostic data
+    setStatusValues(prev => ({
+      ...prev, 
+      nodes: activeNetName, 
+      rpc: 'Skipped', 
+      proto: 'ShelbyNet v2.0', 
+      chain: 'SYNCED', 
+      enc: walletConnected ? 'Connected' : 'Disconnected'
+    }));
+    setStatusVisibleRows(['sr-net', 'sr-nodes', 'sr-rpc', 'sr-proto', 'sr-chain', 'sr-enc']);
+    
+    // Background fetch if skipped
+    if (fetchVaultHistory) fetchVaultHistory().catch(() => {});
   };
 
   useEffect(() => {
@@ -287,76 +290,115 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
 
   // --- Boot Sequence Logic ---
   useEffect(() => {
-    if (currentStep >= steps.length) return;
+    let isCancelled = false;
 
-    const step = steps[currentStep];
-    const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    
-    // Add new log entry
-    setLogs(prev => [...prev, { tag: step.tag, msg: step.msg, time: timestamp, typed: '' }]);
+    const runSequence = async () => {
+      let currentPct = 0;
 
-    let typeIdx = 0;
-    const typeTimer = setInterval(() => {
-      setLogs(prev => {
-        const last = [...prev];
-        const current = last[last.length - 1];
-        if (typeIdx < step.msg.length) {
-          current.typed += step.msg[typeIdx++];
-          return last;
-        } else {
-          clearInterval(typeTimer);
-          // Typing done, start bar animation
-          setTimeout(() => startBarAnim(step), 120);
-          return last;
-        }
-      });
-    }, 28);
-
-    const startBarAnim = (step: any) => {
-      const startTime = performance.now();
-      const initialPct = currentStep === 0 ? 0 : steps[currentStep-1].pct;
-      
-      const barTick = (now: number) => {
-        const elapsed = now - startTime;
-        const t = Math.min(elapsed / step.barDuration, 1);
-        const ease = 1 - Math.pow(1 - t, 4);
-        const val = initialPct + (step.pct - initialPct) * ease;
+      const typeLogAsync = async (tag: string, fullMsg: string, targetPct: number, duration: number = 400) => {
+        if (isCancelled) return;
+        const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false });
         
-        if (barFillRef.current) barFillRef.current.style.width = val + '%';
-        if (barPctRef.current) barPctRef.current.textContent = Math.round(val) + '%';
-        if (barTrackRef.current) barTrackRef.current.style.setProperty('--bar-edge', val + '%');
-
-        if (t < 1) {
-          requestAnimationFrame(barTick);
-        } else {
-          if (step.pct === 100) {
-            playSound();
-            setBootReady(true);
-            setStatusText('Web3 Environment Ready. Welcome back.');
-            showDiagnostics();
-          } else {
-            setTimeout(() => setCurrentStep(prev => prev + 1), 420);
-          }
+        // Add log line
+        setLogs(prev => [...prev, { tag, msg: fullMsg, time: timestamp, typed: '' }]);
+        
+        // Typing anim
+        for (let i = 0; i < fullMsg.length; i++) {
+          if (isCancelled) return;
+          setLogs(prev => {
+            const last = [...prev];
+            last[last.length - 1].typed += fullMsg[i];
+            return last;
+          });
+          await new Promise(r => setTimeout(r, 15 + Math.random() * 15));
         }
+
+        if (isCancelled) return;
+        await new Promise(r => setTimeout(r, 80));
+
+        // Bar anim
+        if (isCancelled) return;
+        const start = performance.now();
+        const initial = currentPct;
+        return new Promise<void>(resolve => {
+           const barTick = (now: number) => {
+             if (isCancelled) { resolve(); return; }
+             const elapsed = now - start;
+             const t = Math.min(elapsed / duration, 1);
+             const ease = 1 - Math.pow(1 - t, 4);
+             const val = initial + (targetPct - initial) * ease;
+             
+             if (barFillRef.current) barFillRef.current.style.width = val + '%';
+             if (barPctRef.current) barPctRef.current.textContent = Math.round(val) + '%';
+             if (barTrackRef.current) barTrackRef.current.style.setProperty('--bar-edge', val + '%');
+
+             if (t < 1) requestAnimationFrame(barTick);
+             else {
+                currentPct = targetPct;
+                resolve();
+             }
+           };
+           requestAnimationFrame(barTick);
+        });
       };
-      requestAnimationFrame(barTick);
+
+      const revealRow = (id: string, key: string, val: string) => {
+        setStatusValues(prev => ({...prev, [key]: val}));
+        setStatusVisibleRows(prev => prev.includes(id) ? prev : [...prev, id]);
+      };
+
+      // 1. BOOT
+      revealRow('sr-net', 'net', 'ONLINE');
+      await typeLogAsync('BOOT', 'ShelbyOS Web3 Kernel v1.2', 8, 300);
+
+      // 2. RPC
+      revealRow('sr-nodes', 'nodes', activeNetName);
+      await typeLogAsync('INIT', `Connecting to ${activeNetName} RPC...`, 20, 400);
+
+      let rpcLat = 'ERR';
+      let blockHeight = 'Unknown';
+      try {
+         if (rpcUrl) {
+            const t0 = performance.now();
+            const res = await fetch(rpcUrl);
+            const data = await res.json();
+            rpcLat = Math.round(performance.now() - t0) + ' ms';
+            blockHeight = data.block_height || 'Synced';
+         }
+      } catch(e) { rpcLat = 'Offline'; }
+      
+      revealRow('sr-rpc', 'rpc', rpcLat);
+      await typeLogAsync('RPC', `Latency: ${rpcLat} | Latest Block: ${blockHeight}`, 38, 400);
+      revealRow('sr-chain', 'chain', blockHeight !== 'Unknown' ? 'SYNCED' : 'OFFLINE');
+
+      // 3. AUTH (Wallet)
+      const wStatus = walletConnected ? 'Connected' : 'Disconnected';
+      revealRow('sr-enc', 'enc', wStatus);
+      await typeLogAsync('AUTH', `Wallet status: ${wStatus}`, 55, 300);
+
+      // 4. SYNC (Vault)
+      await typeLogAsync('SYNC', 'Synchronizing ShelbyNet vault index...', 75, 400);
+      if (fetchVaultHistory) {
+         try { await fetchVaultHistory(); } catch(e) {}
+      }
+      revealRow('sr-proto', 'proto', 'ShelbyNet v2.0');
+      
+      await typeLogAsync('LOAD', 'Vault data loaded. Preparing UI...', 90, 300);
+      await typeLogAsync('READY', 'ShelbyOS Web3 environment ready.', 100, 500);
+
+      if (!isCancelled) {
+         playSound();
+         setBootReady(true);
+         setStatusText('Web3 Environment Ready. Welcome back.');
+      }
     };
 
-    return () => clearInterval(typeTimer);
-  }, [currentStep]);
+    if (!bootReady && !isExiting) {
+      runSequence();
+    }
 
-  const showDiagnostics = () => {
-    const rows = ['sr-net', 'sr-nodes', 'sr-rpc', 'sr-proto', 'sr-chain', 'sr-enc'];
-    rows.forEach((r, i) => {
-      setTimeout(() => setStatusVisibleRows(prev => [...prev, r]), i * 180);
-    });
-
-    setTimeout(() => setStatusValues(prev => ({...prev, nodes: 'Aptos Mainnet'})), 500);
-    setTimeout(() => setStatusValues(prev => ({...prev, rpc: '42 ms'})), 800);
-    setTimeout(() => setStatusValues(prev => ({...prev, proto: 'ShelbyNet v2.0'})), 1100);
-    setTimeout(() => setStatusValues(prev => ({...prev, chain: 'CONNECTED'})), 1400);
-    setTimeout(() => setStatusValues(prev => ({...prev, enc: 'Ed25519 / AES'})), 1700);
-  };
+    return () => { isCancelled = true; };
+  }, [activeNetName, rpcUrl, walletConnected, fetchVaultHistory, bootReady, isExiting]);
 
   const handleEnter = () => {
     setIsExiting(true);
@@ -400,7 +442,7 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
           <div className="os-subtitle">The Decentralized Web3 Operating System</div>
         </div>
 
-        <div className={`progress-panel intro-panel ${currentStep > 0 ? 'boot-visible' : ''}`}>
+        <div className="progress-panel intro-panel boot-visible">
           <div className="progress-label">System Initialization</div>
           <div className="xp-bar-track" ref={barTrackRef}>
             <div className="xp-bar-fill" ref={barFillRef}>
@@ -410,7 +452,7 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
           <div className="bar-pct" ref={barPctRef}>0%</div>
         </div>
 
-        <div className={`terminal-panel intro-panel ${currentStep > 1 ? 'boot-visible' : ''}`}>
+        <div className="terminal-panel intro-panel boot-visible">
           <div className="terminal-titlebar">SHELBY OS — WEB3 BOOT LOG v1.2</div>
           <div className="terminal-body" ref={termLogRef}>
             {logs.map((log, i) => (
@@ -424,7 +466,7 @@ const Intro: React.FC<IntroProps> = ({ onComplete }) => {
           </div>
         </div>
 
-        <div className={`status-panel intro-panel ${currentStep > 2 ? 'boot-visible' : ''}`} id="statusPanel">
+        <div className="status-panel intro-panel boot-visible" id="statusPanel">
           <div className="status-header">On-Chain Diagnostics</div>
           <div className="status-grid">
             <div className={`status-row ${statusVisibleRows.includes('sr-net') ? 'visible' : ''}`} id="sr-net">

@@ -835,7 +835,13 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
   // 🛡️ Global UI Safety Guards
   if (showIntro) {
-    return <Intro onComplete={() => setShowIntro(false)} />;
+    return <Intro 
+      onComplete={() => setShowIntro(false)} 
+      walletConnected={walletConnected}
+      activeNetName={ACTIVE_NET.label}
+      rpcUrl={ACTIVE_NET.aptosRpc}
+      fetchVaultHistory={fetchVaultHistory} 
+    />;
   }
 
   if (!ACTIVE_NET) {
