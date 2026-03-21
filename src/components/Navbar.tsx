@@ -31,7 +31,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const [isFundOpen, setIsFundOpen] = React.useState(false);
   return (
     <nav className="nav">
-      <div className="nav-main">
+      <div className="nav-top">
         <a href="https://shelby.xyz/" target="_blank" rel="noopener noreferrer" className="navLogoLink">
           <img src="/logo/shelby.jpg" className="navLogoImg" alt="ShelbyOS" />
           <span className="navTitle">ShelbyOS</span>

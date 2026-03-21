@@ -3,14 +3,20 @@
 .nav {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 10px 24px;
   background: var(--titlebar);
   color: var(--text);
   border-bottom: 1px solid var(--border-light);
-  flex-wrap: wrap;
   position: relative;
   z-index: 1000;
   overflow: visible !important;
+}
+
+.nav-top {
+  display: flex;
+  align-items: center;
+  flex: 1;
 }
 
 .navLogoLink {
@@ -139,37 +145,43 @@
 
 @media (max-width: 768px) {
   .nav { 
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 10px; 
-    gap: 4px;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 6px 12px; 
+    gap: 0;
     overflow: visible !important;
     z-index: 1000;
   }
   
   .navSubtext { display: none; }
   
+  .nav-top {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Baris 1: Logo kiri, Nav kanan */
+    flex-wrap: nowrap !important;
+    padding-bottom: 6px;
+  }
+
   .navLogoLink { 
-    order: 1;
-    flex: 0 0 auto;
-    margin-right: auto; 
+    margin-right: 0; 
     gap: 4px;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .navTitle { font-size: 14px; }
   .navLogoImg { width: 18px; height: 18px; }
 
   .navLinks { 
-    order: 2;
-    flex: 0 0 auto;
     margin: 0; 
     display: flex;
     align-items: center;
     gap: 4px;
-    white-space: nowrap;
+    white-space: nowrap !important;
+    flex: 0 0 auto;
+    justify-content: flex-end;
   }
 
   .navLink {
@@ -180,21 +192,20 @@
   .navSep { margin: 0 2px; font-size: 9px; }
 
   .header-controls { 
-    order: 3;
     width: 100%; 
     display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: flex-end !important; /* Right-align controls on mobile */
+    flex-wrap: nowrap !important; /* Baris 2: Tetap 1 baris */
+    justify-content: flex-end !important; /* Baris 2: Rata kanan */
     align-items: center;
-    gap: 4px !important;
+    gap: 2px !important; 
     padding-top: 6px; 
-    margin-top: 2px; 
     border-top: 1px solid rgba(255,255,255,0.08); 
     overflow: visible !important;
   }
   
   .header-controls > * {
     flex: 0 1 auto;
+    min-width: 0;
   }
   
   .navControl {
@@ -212,15 +223,23 @@
   .header-controls .select95,
   .header-controls .btn95 {
     height: 24px !important;
+    min-height: 24px !important;
     font-size: 10px !important;
     padding: 1px 4px !important;
     min-width: 0 !important;
     margin: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Specifically for the Connect/Disconnect button to ensure consistency */
+  .header-controls > .btn95:last-child {
+    min-width: 76px !important; /* Fixed width to prevent wrap shift */
+    text-align: center;
   }
 
   .header-controls .theme-select,
   .header-controls .network-select {
-    max-width: 90px !important;
+    max-width: 80px !important;
   }
 
   /* Fix Fund Dropdown from being cut off on mobile */
