@@ -17,6 +17,8 @@ export interface StoredFile {
   network?: string;
   txHash?: string;
   cid?: string;
+  blobId?: string; // On-chain unique identifier
+  blobNameSuffix: string; // Blob path without owner prefix
   previewUrl?: string;
 }
 

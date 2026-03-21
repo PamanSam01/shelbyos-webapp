@@ -3,7 +3,7 @@ import { useState } from 'react';
 export function useModals() {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isPermModalOpen, setIsPermModalOpen] = useState(false);
-  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
+
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isUploadDetailModalOpen, setIsUploadDetailModalOpen] = useState(false);
@@ -16,8 +16,7 @@ export function useModals() {
     setIsWalletModalOpen,
     isPermModalOpen,
     setIsPermModalOpen,
-    isConfirmClearOpen,
-    setIsConfirmClearOpen,
+
     isFundModalOpen,
     setIsFundModalOpen,
     isDetailModalOpen,

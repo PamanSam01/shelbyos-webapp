@@ -78,7 +78,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: 360px minmax(0, 1fr); /* Sidebar Left, Content Right */
   gap: 24px;
   padding: 24px 20px;
   max-width: 1800px;
