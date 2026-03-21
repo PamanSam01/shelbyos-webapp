@@ -3,20 +3,14 @@
 .nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 10px 24px;
   background: var(--titlebar);
   color: var(--text);
   border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
   position: relative;
   z-index: 1000;
   overflow: visible !important;
-}
-
-.nav-main {
-  display: flex;
-  align-items: center;
-  flex: 1;
 }
 
 .navLogoLink {
@@ -145,24 +139,23 @@
 
 @media (max-width: 768px) {
   .nav { 
-    flex-direction: column;
-    align-items: stretch;
-    padding: 8px 12px; 
-    gap: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px; 
+    gap: 4px;
+    overflow: visible !important;
+    z-index: 1000;
   }
   
   .navSubtext { display: none; }
   
-  .nav-main {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 8px;
-  }
-
   .navLogoLink { 
-    margin-right: 0; 
+    order: 1;
+    flex: 0 0 auto;
+    margin-right: auto; 
     gap: 4px;
   }
 
@@ -170,6 +163,8 @@
   .navLogoImg { width: 18px; height: 18px; }
 
   .navLinks { 
+    order: 2;
+    flex: 0 0 auto;
     margin: 0; 
     display: flex;
     align-items: center;
@@ -185,13 +180,15 @@
   .navSep { margin: 0 2px; font-size: 9px; }
 
   .header-controls { 
+    order: 3;
     width: 100%; 
     display: flex !important;
     flex-wrap: wrap !important;
-    justify-content: flex-end !important;
+    justify-content: flex-end !important; /* Right-align controls on mobile */
     align-items: center;
     gap: 4px !important;
-    padding-top: 8px; 
+    padding-top: 6px; 
+    margin-top: 2px; 
     border-top: 1px solid rgba(255,255,255,0.08); 
     overflow: visible !important;
   }
