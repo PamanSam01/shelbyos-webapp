@@ -7,7 +7,12 @@ interface UploadPanelProps {
   walletConnected?: boolean;
   isUploading?: boolean;
   uploadProgress?: number;
-  queuedFiles?: File[];
+  queue?: any[]; // Array of UploadQueueItem
+  statusLine?: string;
+  encryptEnabled?: boolean;
+  onEncryptChange?: (val: boolean) => void;
+  isPreparing?: boolean;
+  hasEncryptionKey?: boolean;
 }
 
 const UploadPanel: React.FC<UploadPanelProps> = ({
@@ -16,7 +21,12 @@ const UploadPanel: React.FC<UploadPanelProps> = ({
   walletConnected = false,
   isUploading = false,
   uploadProgress = 0,
-  queuedFiles = [],
+  queue = [],
+  statusLine = '',
+  encryptEnabled = false,
+  onEncryptChange,
+  isPreparing = false,
+  hasEncryptionKey = false,
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,23 +90,38 @@ const UploadPanel: React.FC<UploadPanelProps> = ({
           </div>
         </div>
 
-        {queuedFiles.length > 0 && (
+        {queue.length > 0 && (
           <div className="queue-list">
-            {queuedFiles.map((file, i) => (
-              <div key={i} className="queue-item">
-                <span className="qname">{file.name}</span>
-                <span className="qsize">{fmtSize(file.size)}</span>
+            {queue.map((item, i) => (
+              <div key={i} className="queue-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <span className="qname" title={item.file.name}>{item.file.name}</span>
+                    <span style={{ fontSize: '9px', color: 'var(--border-mid)' }}>
+                        {item.status === 'preparing' && '⌛ Preparing...'}
+                        {item.status === 'ready' && '✓ Ready'}
+                        {item.status === 'uploading' && '↑ Uploading...'}
+                        {item.status === 'stored' && '✅ Done'}
+                        {item.status === 'error' && '❌ Error'}
+                    </span>
+                </div>
+                <span className="qsize">{fmtSize(item.file.size)}</span>
               </div>
             ))}
           </div>
         )}
 
         {(isUploading || uploadProgress > 0) && (
-          <div className="progress95-wrap" style={{ display: 'block' }}>
+          <div className="progress95-wrap" style={{ display: 'block', marginBottom: '2px' }}>
             <div 
               className="progress95-bar" 
               style={{ width: `${uploadProgress}%` }}
             ></div>
+          </div>
+        )}
+
+        {statusLine && (
+          <div style={{ fontSize: '11px', color: 'var(--border-mid)', marginBottom: '5px', fontStyle: 'italic' }}>
+            {statusLine}
           </div>
         )}
 
@@ -108,28 +133,41 @@ const UploadPanel: React.FC<UploadPanelProps> = ({
             padding: '5px 6px', 
             border: '1px solid var(--border-mid)', 
             background: 'var(--panel)', 
-            cursor: 'not-allowed', 
-            fontSize: '12px', 
-            opacity: 0.6 
+            cursor: 'pointer', 
+            fontSize: '12px'
           }}>
-            <input type="checkbox" disabled style={{ cursor: 'not-allowed', width: '13px', height: '13px' }} />
+            <input 
+              type="checkbox" 
+              checked={encryptEnabled}
+              onChange={(e) => onEncryptChange?.(e.target.checked)}
+              style={{ cursor: 'pointer', width: '13px', height: '13px' }} 
+            />
             🔒 Encrypt file before upload
-            <span className="coming-soon-badge">COMING SOON</span>
           </label>
           <span className="tiptext" style={{ whiteSpace: 'normal', maxWidth: '240px', textAlign: 'left' }}>
-            Client-side encryption will be available in a future update.
+            Protects your files with AES-GCM encryption before sending them to the network.
           </span>
         </span>
 
-        <div style={{ display: 'flex', gap: '5px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
           <button 
             className="btn95 primary" 
-            style={{ flex: 2, padding: '8px 10px' }} 
+            style={{ width: '100%', padding: '10px' }} 
             onClick={onUpload}
-            disabled={!walletConnected || queuedFiles.length === 0 || isUploading}
+            disabled={!walletConnected || queue.length === 0 || isUploading || isPreparing}
           >
-            {isUploading ? 'UPLOADING...' : 'UPLOAD TO SHELBY'}
+            {isUploading ? 'UPLOADING...' : 
+             isPreparing ? 'PREPARING...' :
+             (encryptEnabled && !hasEncryptionKey) ? 'STEP 1: AUTHORIZE' :
+             (encryptEnabled && hasEncryptionKey) ? 'STEP 2: UPLOAD NOW' :
+             'UPLOAD TO SHELBY'}
           </button>
+          
+          {encryptEnabled && hasEncryptionKey && !isUploading && (
+            <div style={{ fontSize: '10px', color: '#00aa00', textAlign: 'center', marginTop: '-2px' }}>
+              ✓ Encryption Authorized
+            </div>
+          )}
         </div>
 
         {!walletConnected && (
