@@ -356,6 +356,9 @@ tbody tr.selected td {
 .exp-row-wrapper {
   border-bottom: 1px solid var(--border-mid);
   background: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .exp-row-wrapper.exp-row-open {
@@ -370,6 +373,10 @@ tbody tr.selected td {
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .exp-row-check {
@@ -380,6 +387,7 @@ tbody tr.selected td {
 .exp-row-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .exp-row-top {
@@ -387,6 +395,8 @@ tbody tr.selected td {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
+  width: 100%;
 }
 
 .exp-row-name {
@@ -394,7 +404,11 @@ tbody tr.selected td {
   font-size: clamp(11px, 2.8vw, 13px); /* Responsive font scaling */
   display: flex;
   align-items: center;
-  max-width: clamp(140px, 45vw, 240px); /* Adaptive width */
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Base name truncates if space is tight */
@@ -600,6 +614,15 @@ tbody tr.selected td {
 /* Desktop layout by default */
 .mobile-layout {
   display: none !important;
+}
+
+@media screen and (max-width: 600px) {
+  .mobile-vault-list {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
 }
 
 .desktop-layout {

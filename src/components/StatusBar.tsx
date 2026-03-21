@@ -57,7 +57,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
         </div>
       </div>
       <div className="statusbar-credits">
-        Built on <a href="https://x.com/shelbyserves" target="_blank" rel="noopener noreferrer">Shelby</a> | Created by <a href="https://x.com/0xdhyzal" target="_blank" rel="noopener noreferrer">0xSam</a>
+        Built on <a href="https://x.com/shelbyserves" target="_blank" rel="noopener noreferrer">Shelby</a> | Created by <a href="https://x.com/MrSamweb3" target="_blank" rel="noopener noreferrer">0xPamanSam</a>
       </div>
     </div>
   );
