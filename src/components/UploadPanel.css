@@ -29,6 +29,9 @@
   margin-top: 6px;
   max-height: 140px;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .queue-item {
@@ -40,13 +43,24 @@
   border: 1px solid var(--border-mid);
   font-size: 12px;
   color: var(--text);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+.queue-item > div {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .qname {
+  display: block;
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
 }
 
 .qsize {

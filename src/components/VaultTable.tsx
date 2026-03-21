@@ -93,7 +93,8 @@ const ExpandableRow: React.FC<{
   onDownload?: () => void;
   onDelete?: () => void;
   formatDate: (val: any) => string;
-}> = ({ file, checked, onToggle, expanded, onToggleExpand, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete, formatDate }) => {
+  isHot: (val: any) => boolean;
+}> = ({ file, checked, onToggle, expanded, onToggleExpand, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete, formatDate, isHot }) => {
   const handleRowClick = () => {
     onToggleExpand();
   };
@@ -116,6 +117,7 @@ const ExpandableRow: React.FC<{
             <span className="ext-icon" style={{ background: extColor(file.ext) }}>{file.ext.slice(0, 2)}</span>
             <div className="exp-row-name" title={file?.name || ""}>
               {truncateName(file?.name || "Unknown", 26)}
+              {file.vis === 'public' && file.status === 'stored' && isHot(file.uploadedAt || file.createdAt || file.timestamp) && <span className="badge badge-hot" style={{ marginLeft: '6px' }}>🔥 HOT</span>}
             </div>
           </div>
           <div className="exp-row-meta">
@@ -201,6 +203,24 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
       return new Date(d * 1000).toLocaleString();
     } catch {
       return '—';
+    }
+  };
+
+  const isHot = (val: any) => {
+    if (!val) return false;
+    try {
+      let d = typeof val === 'number' ? val : Number(val);
+      if (isNaN(d)) d = new Date(val).getTime();
+      
+      // Microseconds -> Millis
+      if (d > 100000000000000) d = d / 1000;
+      // Seconds -> Millis
+      else if (d < 100000000000) d = d * 1000;
+      
+      const diff = Date.now() - d;
+      return diff > 0 && diff < 86400000; // 24 Hours
+    } catch {
+      return false;
     }
   };
 
@@ -314,6 +334,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               onDownload={() => onDownload?.(s.id)}
               onDelete={() => onDelete?.(s.id)}
               formatDate={formatDate}
+              isHot={isHot}
             />
           ))}
 
@@ -375,7 +396,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
                       <td>
                         <span className="ext-icon" style={{ background: extColor(s?.ext || "TXT") }}>{(s?.ext || "TX").slice(0, 2)}</span>
                         {s?.name || "Unknown"}
-                        {s.vis === 'public' && s.status === 'stored' && <span className="badge badge-hot" style={{ marginLeft: '8px' }}>🔥 HOT</span>}
+                        {s.vis === 'public' && s.status === 'stored' && isHot(s.uploadedAt || s.createdAt || s.timestamp) && <span className="badge badge-hot" style={{ marginLeft: '8px' }}>🔥 HOT</span>}
                         <span className={`badge badge-public interactive`} style={{ marginLeft: '6px', cursor: 'pointer' }} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
                         {s.network && <span className="badge badge-testnet" style={{ marginLeft: '6px' }}>{s.network}</span>}
                       </td>
