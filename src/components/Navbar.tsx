@@ -31,17 +31,19 @@ const Navbar: React.FC<NavbarProps> = ({
   const [isFundOpen, setIsFundOpen] = React.useState(false);
   return (
     <nav className="nav">
-      <a href="https://shelby.xyz/" target="_blank" rel="noopener noreferrer" className="navLogoLink">
-        <img src="/logo/shelby.jpg" className="navLogoImg" alt="ShelbyOS" />
-        <span className="navTitle">ShelbyOS</span>
-      </a>
-      <span className="navSubtext">Decentralized Storage Desktop on Shelby Network</span>
-      <div className="navLinks">
-        <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/tools/wallets/petra-setup#apt-faucet', '_blank')}>Faucet</a>
-        <span className="navSep">//</span>
-        <a className="navLink" onClick={() => window.open('https://explorer.shelby.xyz/shelbynet', '_blank')}>Explorer</a>
-        <span className="navSep">//</span>
-        <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/', '_blank')}>Docs</a>
+      <div className="nav-main">
+        <a href="https://shelby.xyz/" target="_blank" rel="noopener noreferrer" className="navLogoLink">
+          <img src="/logo/shelby.jpg" className="navLogoImg" alt="ShelbyOS" />
+          <span className="navTitle">ShelbyOS</span>
+        </a>
+        <span className="navSubtext">Decentralized Storage Desktop on Shelby Network</span>
+        <div className="navLinks">
+          <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/tools/wallets/petra-setup#apt-faucet', '_blank')}>Faucet</a>
+          <span className="navSep">//</span>
+          <a className="navLink" onClick={() => window.open('https://explorer.shelby.xyz/shelbynet', '_blank')}>Explorer</a>
+          <span className="navSep">//</span>
+          <a className="navLink" onClick={() => window.open('https://docs.shelby.xyz/', '_blank')}>Docs</a>
+        </div>
       </div>
       <div className="header-controls">
         <label className="navControl network-control">
