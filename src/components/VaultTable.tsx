@@ -17,9 +17,12 @@ export interface StoredFile {
   network?: string;
   txHash?: string;
   cid?: string;
-  blobId?: string; // On-chain unique identifier
-  blobNameSuffix: string; // Blob path without owner prefix
+  blobId?: string; 
+  blobNameSuffix: string; 
   previewUrl?: string;
+  timestamp?: number | string;
+  createdAt?: number | string;
+  uploadedAt?: number | string;
 }
 
 interface ShelbyVaultTableProps {
@@ -89,7 +92,8 @@ const ExpandableRow: React.FC<{
   onCopyLink?: () => void;
   onDownload?: () => void;
   onDelete?: () => void;
-}> = ({ file, checked, onToggle, expanded, onToggleExpand, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete }) => {
+  formatDate: (val: any) => string;
+}> = ({ file, checked, onToggle, expanded, onToggleExpand, extColor, fmtSize, onPreview, onOpenExplorer, onCopyLink, onDownload, onDelete, formatDate }) => {
   const handleRowClick = () => {
     onToggleExpand();
   };
@@ -115,10 +119,13 @@ const ExpandableRow: React.FC<{
             </div>
           </div>
           <div className="exp-row-meta">
+            <span style={{ marginRight: '8px' }}>{formatDate(file.uploadedAt || file.createdAt || file.timestamp)}</span>
             {fmtSize(file.size)}
             {file.status === 'stored'
-              ? <span className="badge badge-public">✓ STORED</span>
-              : <span className="badge badge-testnet">⏳ PENDING</span>}
+              ? (file.ext === 'ENC' 
+                  ? <span className="badge badge-encrypted" style={{ marginLeft: '4px' }}>🔒 ENCRYPTED</span> 
+                  : <span className="badge badge-public" style={{ marginLeft: '4px' }}>✓ STORED</span>)
+              : <span className="badge badge-testnet" style={{ marginLeft: '4px' }}>⏳ PENDING</span>}
           </div>
         </div>
         <div className="exp-row-chevron">{expanded ? '▲' : '▼'}</div>
@@ -127,7 +134,12 @@ const ExpandableRow: React.FC<{
       {/* Expandable action panel */}
       {expanded && (
         <div className="inline-action-row">
-          <button className="clean-action-btn action-icon" title="Preview"  onClick={act(onPreview)}>👁</button>
+          <button 
+            className={`clean-action-btn action-icon ${file.ext === 'ENC' ? 'disabled-action' : ''}`} 
+            title={file.ext === 'ENC' ? "Cannot preview encrypted files" : "Preview"}  
+            onClick={file.ext === 'ENC' ? undefined : act(onPreview)}
+            style={file.ext === 'ENC' ? { opacity: 0.3, cursor: 'not-allowed' } : {}}
+          >👁</button>
           <button className="clean-action-btn action-icon" title="Explorer" onClick={act(onOpenExplorer)}>🔗</button>
           <button className="clean-action-btn action-icon" title="Copy"     onClick={act(onCopyLink)}>📋</button>
           <button className="clean-action-btn action-icon" title="Download" onClick={act(onDownload)}>⬇</button>
@@ -175,10 +187,24 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
     return (b / 1073741824).toFixed(2) + ' GB';
   };
 
-  const shortenAddr = (addr: string) => {
-    if (!addr || addr === 'anonymous') return addr;
-    return addr.slice(0, 6) + '...' + addr.slice(-4);
+  const formatDate = (val: any) => {
+    if (!val) return '—';
+    try {
+      const d = typeof val === 'number' ? val : Number(val);
+      if (isNaN(d)) return new Date(val).toLocaleString();
+      
+      // Detection: Micros (16+ digits)
+      if (d > 100000000000000) return new Date(d / 1000).toLocaleString();
+      // Detection: Millis (13+ digits)
+      if (d > 100000000000) return new Date(d).toLocaleString();
+      // Seconds
+      return new Date(d * 1000).toLocaleString();
+    } catch {
+      return '—';
+    }
   };
+
+
 
   const extColor = (ext: string) => {
     const colors: Record<string, string> = {
@@ -287,6 +313,7 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               onCopyLink={() => onCopyLink?.(s.id)}
               onDownload={() => onDownload?.(s.id)}
               onDelete={() => onDelete?.(s.id)}
+              formatDate={formatDate}
             />
           ))}
 
@@ -325,10 +352,9 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
               <thead>
                 <tr>
                   <th style={{ width: '18px' }}></th>
-                  <th style={{ width: '99%' }}>File</th>
-                  <th>Size</th>
+                  <th style={{ width: '45%' }}>File</th>
                   <th>Date</th>
-                  <th>Uploader</th>
+                  <th>Size</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -353,12 +379,24 @@ const VaultTable: React.FC<ShelbyVaultTableProps> = ({
                         <span className={`badge badge-public interactive`} style={{ marginLeft: '6px', cursor: 'pointer' }} title={`Change permissions`} onClick={(e) => { e.stopPropagation(); onManagePermission?.(s.id, null); }}>{pIcon} {pLabel}</span>
                         {s.network && <span className="badge badge-testnet" style={{ marginLeft: '6px' }}>{s.network}</span>}
                       </td>
+                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '11px' }}>
+                        {formatDate(s.uploadedAt || s.createdAt || s.timestamp)}
+                      </td>
                       <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)' }}>{fmtSize(s.size)}</td>
-                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '12px' }}>{s.date || ''} {s.time || ''}</td>
-                      <td style={{ whiteSpace: 'nowrap', color: 'var(--border-mid)', fontSize: '10px', fontFamily: 'var(--mono)' }} title={s?.uploader || ''}>{shortenAddr(s?.uploader || '')}</td>
-                      <td><span className={s?.status === 'stored' ? 'badge badge-public' : 'badge badge-testnet'}>{(s?.status || "pending").toUpperCase()}</span></td>
+                      <td>
+                        <span className={s?.status === 'stored' ? (s.ext === 'ENC' ? 'badge badge-encrypted' : 'badge badge-public') : 'badge badge-testnet'}>
+                          {s?.status === 'stored' && s.ext === 'ENC' ? '🔒 ENCRYPTED' : (s?.status || "pending").toUpperCase()}
+                        </span>
+                      </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onPreview?.(s.id); }}>👁</button><span className="tiptext">Preview file</span></span>
+                        <span className="tip">
+                          <button 
+                            className={`icon-btn95 action-icon ${s.ext === 'ENC' ? 'disabled' : ''}`} 
+                            onClick={(e) => { e.stopPropagation(); s.ext !== 'ENC' && onPreview?.(s.id); }}
+                            style={s.ext === 'ENC' ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                          >👁</button>
+                          <span className="tiptext">{s.ext === 'ENC' ? "Cannot preview encrypted files" : "Preview file"}</span>
+                        </span>
                         <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onOpenExplorer?.(s.id); }}>🔗</button><span className="tiptext">Open in Shelby Explorer</span></span>
                         <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onCopyLink?.(s.id); }}>📋</button><span className="tiptext">Copy explorer link</span></span>
                         <span className="tip"><button className="icon-btn95 action-icon" onClick={(e) => { e.stopPropagation(); onDownload?.(s.id); }}>⬇</button><span className="tiptext">Download file</span></span>

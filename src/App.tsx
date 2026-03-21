@@ -6,6 +6,7 @@ import { ShelbyClientProvider, useUploadBlobs, useDeleteBlobs } from "@shelby-pr
 import { ShelbyClient } from "@shelby-protocol/sdk/browser"
 
 import { formatTokenBalance, formatFileSize } from './utils/file'
+import { encryptFileWithSignature } from './utils/crypto'
 import { debugLog, debugWarn, debugError } from './utils/logger'
 import Navbar from './components/Navbar'
 import VaultTable from './components/VaultTable'
@@ -19,8 +20,6 @@ import { PermissionModal } from './components/PermissionModal'
 import type { PermissionConfig } from './components/PermissionModal'
 
 import FileDetailModal from './components/FileDetailModal'
-import UploadDetailModal from './components/UploadDetailModal'
-import type { UploadQueueItem } from './components/UploadDetailModal'
 import FilePreviewModal from './components/FilePreviewModal'
 import AccessDeniedModal from './components/AccessDeniedModal'
 import { NETWORKS } from './config/networks'
@@ -28,6 +27,15 @@ import './themes.css'
 import Intro from './components/Intro'
 import UploadTerminal from './components/UploadTerminal'
 import { fetchBlobsFromGraphQL, fetchRecentActivitiesFromGraphQL } from './services/shelbyService'
+
+export interface UploadQueueItem {
+  file: File;
+  blobData?: Uint8Array;
+  permission: string;
+  permConfig: any;
+  permOverridden: boolean;
+  status: 'ready' | 'preparing' | 'uploading' | 'stored' | 'error';
+}
 
 const queryClient = new QueryClient();
 
@@ -37,7 +45,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   theme: string,
   setTheme: (t: string) => void
 }) {
-  const { connect, disconnect, account, connected, signAndSubmitTransaction } = useWallet()
+  const { connect, disconnect, account, connected, signAndSubmitTransaction, signMessage } = useWallet()
   
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
@@ -54,10 +62,8 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [isConnecting, setIsConnecting] = useState(false)
 
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
-  const [isUploadDetailModalOpen, setIsUploadDetailModalOpen] = useState(false)
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
   const [isAccessDeniedOpen, setIsAccessDeniedOpen] = useState(false)
-  const [returnToUpload, setReturnToUpload] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   
   // Data State
@@ -89,6 +95,9 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [isUploading, setIsUploading] = useState(false)
   const [overallProgress, setOverallProgress] = useState(0)
   const [statusLine, setStatusLine] = useState('')
+  const [encryptEnabled, setEncryptEnabled] = useState(false)
+  const [encryptionSignature, setEncryptionSignature] = useState<any>(null)
+  const [isPreparing, setIsPreparing] = useState(false)
   
   const [toast, setToast] = useState({ message: '', type: 'info' as ToastType, isVisible: false })
 
@@ -121,7 +130,6 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
       setOverallProgress(100);
       setStatusLine('✓ Upload complete');
       setTimeout(() => {
-        setIsUploadDetailModalOpen(false);
         setStatusLine('');
         fetchVaultHistory();
       }, 2000);
@@ -191,6 +199,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
             ext: ext,
             size: item.size || 0,
             date: item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown',
+            uploadedAt: item.created_at,
             status: 'stored',
             vis: 'public',
             uploader: item.owner || 'anonymous',
@@ -491,13 +500,12 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     setIsPermModalOpen(false);
     setEditingPermIndex(null);
     setEditingFileId(null);
-    if (returnToUpload) {
-      setIsUploadDetailModalOpen(true);
-      setReturnToUpload(false);
-    }
   }
 
   const handleFilesSelected = (newFiles: FileList) => {
+    setUploadLogs([]);
+    addLog('INIT', `Selected ${newFiles.length} file(s) for upload.`);
+    
     const items: UploadQueueItem[] = Array.from(newFiles).map(file => ({
       file,
       permission: defaultPerm.type,
@@ -506,41 +514,107 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
       status: 'ready'
     }));
     setUploadQueue(prev => [...prev, ...items]);
-    if (!isUploadDetailModalOpen) {
-      setIsUploadDetailModalOpen(true);
-    }
+    addLog('DONE', 'Files added to queue.');
   }
 
   const handleUploadAll = useCallback(async () => {
-    if (isUploading || !uploadQueue.length) return;
+    if (isUploading || isPreparing || !uploadQueue.length) {
+      if (!uploadQueue.length) showToast('No files to upload', 'info');
+      return;
+    }
     if (!walletConnected || !walletAddress) {
       showToast('Connect wallet to continue', 'error');
       return;
     }
-    
-    setIsUploadDetailModalOpen(true);
+
+    // STEP 1: If encryption enabled but NO signature yet, just sign and stop
+    if (encryptEnabled && !encryptionSignature) {
+      setIsPreparing(true);
+      setStatusLine('🔒 Authorizing encryption...');
+      addLog('AUTH', 'Requesting signature for encryption key...');
+      try {
+        const message = "Authorize ShelbyOS to encrypt your files. This signature will be used to derive your local encryption key.";
+        const nonce = Date.now().toString();
+        
+        let sig: any = null;
+        if (signMessage) {
+          const response = await signMessage({ message, nonce });
+          if (typeof response === 'object' && response !== null && 'signature' in response) {
+            sig = response.signature;
+          } else {
+            throw new Error("Wallet did not return a valid signature object.");
+          }
+        } else if ((window as any).martian) {
+          const result = await (window as any).martian.signMessage({ message, nonce });
+          sig = result.signature || result;
+        } else {
+          throw new Error("signMessage not supported by this wallet");
+        }
+        
+        if (!sig) throw new Error("Failed to obtain signature.");
+        setEncryptionSignature(sig);
+        addLog('DONE', 'Signature secured. Click UPLOAD again to proceed.');
+        setStatusLine('✓ Encryption authorized. Ready to upload.');
+        showToast('Encryption authorized ✓ Click UPLOAD again', 'info');
+        return;
+      } catch (err: any) {
+        debugError("Encryption signature failed:", err);
+        showToast(`Encryption signature failed: ${err.message}`, 'error');
+        setStatusLine('⚠ Signature failed');
+        return;
+      } finally {
+        setIsPreparing(false);
+      }
+    }
+
+    // STEP 2: If we have signature or encryption is disabled, proceed with upload
     setIsUploading(true);
-    setOverallProgress(10);
-    setStatusLine('Preparing files...');
+    setOverallProgress(15);
+    setStatusLine('🔒 Encrypting & Preparing files...');
     setUploadLogs([]);
-    addLog('INIT', 'Starting batch upload...');
+    addLog('INIT', 'Starting storage upload sequence...');
 
     try {
-      addLog('PROC', 'Preparing batch data and encoding...');
-      const blobDatas = await Promise.all(uploadQueue.map(async item => ({
-          blobName: item.file.name,
-          blobData: new Uint8Array(await item.file.arrayBuffer())
-      })));
+      // Perform encryption/buffering for all files in the queue
+      const blobDatas = await Promise.all(uploadQueue.map(async (item, idx) => {
+        try {
+          // Update status to 'preparing' locally in UI
+          setUploadQueue(prev => prev.map(qItem => qItem.file === item.file ? { ...qItem, status: 'preparing' } : qItem));
+          
+          let currentFile = item.file;
+          if (encryptEnabled && encryptionSignature) {
+            currentFile = await encryptFileWithSignature(currentFile, encryptionSignature);
+            addLog('LOCK', `Encrypted: ${item.file.name} -> ${currentFile.name}`);
+          }
+          
+          const buffer = new Uint8Array(await currentFile.arrayBuffer());
+          setOverallProgress(20 + Math.floor(((idx + 1) / uploadQueue.length) * 40));
+          
+          // Mark as ready (internally)
+          setUploadQueue(prev => prev.map(qItem => qItem.file === item.file ? { ...qItem, status: 'ready' } : qItem));
+          
+          return {
+            blobName: currentFile.name,
+            blobData: buffer
+          };
+        } catch (err: any) {
+          setUploadQueue(prev => prev.map(qItem => qItem.file === item.file ? { ...qItem, status: 'error' } : qItem));
+          throw err;
+        }
+      }));
 
       setStatusLine('Waiting for wallet approval...');
+      setOverallProgress(70);
       
       const signer = (window as any).martian?.selectedAccount ? {
-        account: { address: (window as any).martian.selectedAccount.address },
+        account: (window as any).martian.selectedAccount,
         signAndSubmitTransaction: (window as any).martian.signAndSubmitTransaction
       } : {
         account: account,
         signAndSubmitTransaction: signAndSubmitTransaction
       };
+
+      addLog('PROC', `Pushing ${blobDatas.length} blobs to Shelby Storage...`);
 
       uploadBlobsMutation.mutate({
         signer: signer as any,
@@ -554,9 +628,9 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
       showToast(msg, 'error');
       addLog('ERR ', msg);
       setIsUploading(false);
-      setStatusLine('⚠ Failed');
+      setStatusLine('⚠ Upload failed');
     }
-  }, [walletConnected, walletAddress, uploadQueue, account, signAndSubmitTransaction, uploadBlobsMutation, addLog]);
+  }, [isUploading, isPreparing, uploadQueue, walletConnected, walletAddress, encryptEnabled, encryptionSignature, signMessage, account, signAndSubmitTransaction, uploadBlobsMutation, addLog]);
 
 
 
@@ -821,11 +895,19 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
           <div className="sidebar-col">
             <UploadPanel 
               walletConnected={walletConnected}
-              queuedFiles={uploadQueue.map(i => i.file)}
               isUploading={isUploading}
               uploadProgress={overallProgress}
               onFilesSelected={handleFilesSelected}
-              onUpload={() => setIsUploadDetailModalOpen(true)}
+              onUpload={handleUploadAll}
+              queue={uploadQueue}
+              statusLine={statusLine}
+              encryptEnabled={encryptEnabled}
+              onEncryptChange={(val) => {
+                setEncryptEnabled(val);
+                setEncryptionSignature(null); // Reset signature if toggle changes
+              }}
+              isPreparing={isPreparing}
+              hasEncryptionKey={!!encryptionSignature}
             />
             
             <div className="window animate-entry delay-3 action-panel-mobile" style={{ marginTop: '10px' }}>
@@ -914,10 +996,6 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
             setIsPermModalOpen(false);
             setEditingPermIndex(null);
             setEditingFileId(null);
-            if (returnToUpload) {
-              setIsUploadDetailModalOpen(true);
-              setReturnToUpload(false);
-            }
           }}
           onApply={handleApplyPermissions}
           initialConfig={
@@ -929,31 +1007,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
           }
         />
 
-        <UploadDetailModal 
-          isOpen={isUploadDetailModalOpen}
-          onClose={() => setIsUploadDetailModalOpen(false)}
-          queue={uploadQueue}
-          defaultPerm={defaultPerm.type}
-          onManageDefaultPerm={() => {
-            setEditingPermIndex(null);
-            setIsUploadDetailModalOpen(false);
-            setReturnToUpload(true);
-            setIsPermModalOpen(true);
-          }}
-          onManageFilePerm={(index) => {
-            setEditingPermIndex(index);
-            setIsUploadDetailModalOpen(false);
-            setReturnToUpload(true);
-            setIsPermModalOpen(true);
-          }}
-          onRemoveItem={(index) => setUploadQueue(prev => prev.filter((_, i) => i !== index))}
-          onClearAll={() => setUploadQueue([])}
-          onAddFiles={handleFilesSelected}
-          onUploadAll={handleUploadAll}
-          isUploading={isUploading}
-          overallProgress={overallProgress}
-          statusLine={statusLine}
-        />
+
 
 
 
