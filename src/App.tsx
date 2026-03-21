@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { Aptos, AptosConfig, Network, type AptosSettings } from "@aptos-labs/ts-sdk"
+import { type AptosSettings } from "@aptos-labs/ts-sdk"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ShelbyClientProvider, useUploadBlobs } from "@shelby-protocol/react"
+import { ShelbyClientProvider, useUploadBlobs, useDeleteBlobs } from "@shelby-protocol/react"
 import { ShelbyClient } from "@shelby-protocol/sdk/browser"
 
 import { formatTokenBalance, formatFileSize } from './utils/file'
@@ -17,7 +17,7 @@ import type { ToastType } from './components/Toast'
 import WalletModal from './components/WalletModal'
 import { PermissionModal } from './components/PermissionModal'
 import type { PermissionConfig } from './components/PermissionModal'
-import ConfirmModal from './components/ConfirmModal'
+
 import FileDetailModal from './components/FileDetailModal'
 import UploadDetailModal from './components/UploadDetailModal'
 import type { UploadQueueItem } from './components/UploadDetailModal'
@@ -52,7 +52,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false)
   const [isPermModalOpen, setIsPermModalOpen] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false)
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isUploadDetailModalOpen, setIsUploadDetailModalOpen] = useState(false)
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
@@ -94,23 +94,26 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
 
-  // Aptos SDK client
-  const aptos = useMemo(() => {
-    try {
-      const config = new AptosConfig({
-        network: ACTIVE_NET.network,
-        fullnode: ACTIVE_NET.aptosRpc,
-      });
-      return new Aptos(config);
-    } catch (err) {
-      debugError("Aptos SDK Initialization Error:", err);
-      return new Aptos(new AptosConfig({ network: Network.TESTNET }));
-    }
-  }, [ACTIVE_NET]);
+
+
+  // Aptos SDK client (removed from state if unused, or kept for health checks)
+  // ...
+
 
   // SDK Hooks
   const uploadBlobsMutation = useUploadBlobs({
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      // Capture and store blob_ids locally per file so delete works without indexer delay
+      if (Array.isArray(result) && walletAddress) {
+        result.forEach((item: any) => {
+          if (item.blobId && item.blobName) {
+            const storageKey = `shelby_id_${walletAddress}_${item.blobName}`;
+            localStorage.setItem(storageKey, item.blobId);
+            debugLog(`[Vault] Stored local ID for ${item.blobName}: ${item.blobId}`);
+          }
+        });
+      }
+
       addLog('DONE', 'Upload batch completed and confirmed on-chain!');
       showToast('Files uploaded successfully ✓', 'success');
       setIsUploading(false);
@@ -134,6 +137,23 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
       }
       setIsUploading(false);
       setStatusLine('⚠ Upload failed');
+    }
+  });
+
+  const deleteBlobsMutation = useDeleteBlobs({
+    onSuccess: () => {
+      showToast('File deleted successfully ✓', 'success');
+      fetchVaultHistory();
+      fetchActivities();
+    },
+    onError: (err: any) => {
+      const msg = err.message || 'Delete failed';
+      if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
+        showToast('Delete cancelled', 'info');
+      } else {
+        debugError('Delete Error:', err);
+        showToast(msg, 'error');
+      }
     }
   });
 
@@ -174,7 +194,10 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
             status: 'stored',
             vis: 'public',
             uploader: item.owner || 'anonymous',
-            blobId: rawName // Use raw blob_name as the internal identifier
+            // Strip @owner/ prefix for SDK deletion operations (required for exact match)
+            blobNameSuffix: (item.blob_name || "").replace(/^@[^/]+\//, ""),
+            // Try to retrieve blobId from local storage (uploaded via this browser)
+            blobId: localStorage.getItem(`shelby_id_${walletAddress}_${item.blob_name}`) || undefined 
           };
         });
         setFiles(mappedFiles);
@@ -535,10 +558,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     }
   }, [walletConnected, walletAddress, uploadQueue, account, signAndSubmitTransaction, uploadBlobsMutation, addLog]);
 
-  const handleClearVault = () => {
-    setFiles([])
-    showToast('Vault history cleared', 'info')
-  }
+
 
 
 
@@ -682,29 +702,23 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
     showToast(`Waiting for wallet signature to delete "${f.name}"…`, 'info');
     try {
-      // Strip redundant owner address prefix if present in blob name (required for SDK delete)
-      let cleanName = f.name;
-      const ownerPrefix = `@${walletAddress}/`;
-      const ownerPrefixLower = `@${walletAddress.toLowerCase()}/`;
-      if (cleanName.startsWith(ownerPrefix)) cleanName = cleanName.slice(ownerPrefix.length);
-      else if (cleanName.startsWith(ownerPrefixLower)) cleanName = cleanName.slice(ownerPrefixLower.length);
+      if (!f.blobNameSuffix) {
+        showToast('Cannot delete: blob identifier missing', 'error');
+        return;
+      }
 
-      const { ShelbyBlobClient } = await import('@shelby-protocol/sdk/browser') as any;
-      const payload = ShelbyBlobClient.createDeleteBlobPayload({ 
-        deployer: ACTIVE_NET.contract as any,
-        blobName: cleanName 
+      const signer = (window as any).martian?.selectedAccount ? {
+        account: { address: (window as any).martian.selectedAccount.address },
+        signAndSubmitTransaction: (window as any).martian.signAndSubmitTransaction
+      } : {
+        account: account,
+        signAndSubmitTransaction: signAndSubmitTransaction
+      };
+
+      deleteBlobsMutation.mutate({
+        signer: signer as any,
+        blobNames: [f.blobNameSuffix] // Pass the exact suffix (without @owner prefix)
       });
-      const txResult = await signAndSubmitTransaction({ data: payload });
-      const txHash = (txResult as any)?.hash || (txResult as any)?.result?.hash;
-      if (!txHash) throw new Error('No tx hash returned after delete');
-
-      showToast(`Confirming deletion on-chain…`, 'info');
-      await aptos.waitForTransaction({ transactionHash: txHash });
-
-      // Re-fetch everything to ensure synced state
-      await fetchVaultHistory();
-      await fetchActivities();
-      showToast(`✓ "${f.name}" deleted from blockchain`, 'success');
     } catch (err: any) {
       const msg: string = err?.message || '';
       if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
@@ -804,6 +818,46 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         />
         <main className="layout-wrapper">
           <div className="layout">
+          <div className="sidebar-col">
+            <UploadPanel 
+              walletConnected={walletConnected}
+              queuedFiles={uploadQueue.map(i => i.file)}
+              isUploading={isUploading}
+              uploadProgress={overallProgress}
+              onFilesSelected={handleFilesSelected}
+              onUpload={() => setIsUploadDetailModalOpen(true)}
+            />
+            
+            <div className="window animate-entry delay-3 action-panel-mobile" style={{ marginTop: '10px' }}>
+              <div className="titlebar">
+                <span>🛠️ Actions</span>
+              </div>
+              <div className="window-body" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <button 
+                  className="btn95 action-mobile-btn" 
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
+                  onClick={() => {
+                    setEditingPermIndex(null);
+                    setIsPermModalOpen(true);
+                  }}
+                >
+                  ⚙️ Permission Defaults
+                </button>
+
+                <button 
+                  className="btn95 action-mobile-btn" 
+                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
+                  onClick={async () => {
+                    await fetchVaultHistory();
+                    showToast('Vault history refreshed ✓', 'success');
+                  }}
+                >
+                  🔄 Refresh Vault
+                </button>
+              </div>
+            </div>
+          </div>
+
           <VaultTable
             files={files}
             checkedIds={checkedIds}
@@ -836,52 +890,6 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
               }
             }}
           />
-          <div className="right-col">
-            <UploadPanel 
-              walletConnected={walletConnected}
-              queuedFiles={uploadQueue.map(i => i.file)}
-              isUploading={isUploading}
-              uploadProgress={overallProgress}
-              onFilesSelected={handleFilesSelected}
-              onUpload={() => setIsUploadDetailModalOpen(true)}
-            />
-            
-            <div className="window animate-entry delay-3 action-panel-mobile" style={{ marginTop: '10px' }}>
-              <div className="titlebar">
-                <span>🛠️ Actions</span>
-              </div>
-              <div className="window-body" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <button 
-                  className="btn95 action-mobile-btn" 
-                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
-                  onClick={() => {
-                    setEditingPermIndex(null);
-                    setIsPermModalOpen(true);
-                  }}
-                >
-                  ⚙️ Permission Defaults
-                </button>
-                <button 
-                  className="btn95 action-mobile-btn" 
-                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
-                  onClick={() => setIsConfirmClearOpen(true)}
-                  disabled={(files?.length || 0) === 0}
-                >
-                  🗑️ Clear History
-                </button>
-                <button 
-                  className="btn95 action-mobile-btn" 
-                  style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
-                  onClick={async () => {
-                    await fetchVaultHistory();
-                    showToast('Vault history refreshed ✓', 'success');
-                  }}
-                >
-                  🔄 Refresh Vault
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       </main>
 
@@ -947,14 +955,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
           statusLine={statusLine}
         />
 
-        <ConfirmModal 
-          isOpen={isConfirmClearOpen}
-          onClose={() => setIsConfirmClearOpen(false)}
-          onConfirm={handleClearVault}
-          message="Clear all upload history from ShelbyVault?"
-          subMessage="This cannot be undone."
-          confirmText="Clear All"
-        />
+
 
         <FileDetailModal 
           isOpen={isDetailModalOpen}

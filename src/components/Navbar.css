@@ -140,9 +140,10 @@
 @media (max-width: 768px) {
   .nav { 
     display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
     padding: 12px 16px; 
     gap: 8px;
   }
@@ -150,50 +151,47 @@
   .navSubtext { display: none; }
   
   .navLogoLink { 
-    order: 1; 
+    order: 1;
+    flex: 0 0 auto;
     margin-right: auto; 
-    margin-left: 0;
   }
 
   .navLinks { 
-    order: 2; 
+    order: 2;
+    flex: 0 0 auto;
     margin: 0; 
-    width: auto; 
-    justify-content: flex-end; 
-    gap: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     white-space: nowrap;
   }
 
-  /* Controls Section Mobile Layout (Horizontal Scroll / Visible Dropdown) */
   .header-controls { 
     order: 3;
     width: 100%; 
     display: flex !important;
-    flex-wrap: nowrap !important;
-    gap: 6px !important;
-    padding-top: 12px; 
+    flex-wrap: wrap !important; /* Allow wrapping on small screens */
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px !important;
+    padding-top: 10px; 
     margin-top: 4px; 
-    border-top: 1px solid rgba(255,255,255,0.15); 
-    overflow-x: visible !important;
-    overflow-y: visible !important;
-    white-space: nowrap !important;
+    border-top: 1px solid rgba(255,255,255,0.12); 
+    overflow: visible !important;
   }
   
   .header-controls > * {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
   }
   
   .navControl {
     display: flex;
-    flex-direction: row !important;
-    justify-content: flex-start;
     align-items: center;
-    width: auto !important;
     font-size: 13px;
     gap: 6px;
   }
 
-  /* Hide both Network and Theme labels on mobile to guard one-line flow */
+  /* Hide labels to keep controls compact */
   .theme-control .control-label,
   .network-control .control-label {
     display: none;
@@ -201,18 +199,18 @@
 
   .header-controls .select95,
   .header-controls .btn95 {
-    width: auto !important;
-    max-width: none !important;
-    min-height: 28px !important;
-    height: 28px !important;
+    height: 30px !important;
     font-size: 12px !important;
-    padding: 4px 8px !important;
+    padding: 4px 10px !important;
   }
 
   .header-controls .theme-select {
-    max-width: 140px !important;
+    max-width: 120px !important;
   }
 
+  .header-controls .network-select {
+    max-width: 120px !important;
+  }
 }
 
 /* ════════════════════════════════════════════════
