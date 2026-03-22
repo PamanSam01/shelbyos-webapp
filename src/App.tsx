@@ -46,16 +46,16 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   setTheme: (t: string) => void
 }) {
   const { connect, disconnect, account, connected, signAndSubmitTransaction, signMessage } = useWallet()
-  
+
   // Wallet State
   const [manualWalletId, setManualWalletId] = useState<string | null>(null);
   const walletConnected = connected || manualWalletId !== null;
   const walletAddress = account?.address?.toString() || (manualWalletId === 'Martian' ? (window as any).martian?.selectedAccount?.address : "");
-  
+
   // Mock balances
   const [aptBalance, setAptBalance] = useState('0.00')
   const [shelbyBalance, setShelbyBalance] = useState('0.00')
-  
+
   // UI Controls (Modals)
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false)
   const [isPermModalOpen, setIsPermModalOpen] = useState(false)
@@ -65,7 +65,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
   const [isAccessDeniedOpen, setIsAccessDeniedOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
-  
+
   // Data State
   const [selectedFile, setSelectedFile] = useState<StoredFile | null>(null)
   const [editingPermIndex, setEditingPermIndex] = useState<number | null>(null)
@@ -78,19 +78,19 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(true);
 
-  const [uploadLogs, setUploadLogs] = useState<{tag: string, msg: string}[]>([]);
+  const [uploadLogs, setUploadLogs] = useState<{ tag: string, msg: string }[]>([]);
   const [showTerminal, setShowTerminal] = useState(false);
   const addLog = useCallback((tag: string, msg: string) => {
     setUploadLogs(prev => [...prev, { tag, msg }]);
   }, []);
-  
+
   const [defaultPerm, setDefaultPerm] = useState<PermissionConfig>({
     type: 'public',
     allowlist: [],
     timelock: '',
     price: '',
   })
-  
+
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [overallProgress, setOverallProgress] = useState(0)
@@ -98,7 +98,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const [encryptEnabled, setEncryptEnabled] = useState(false)
   const [encryptionSignature, setEncryptionSignature] = useState<any>(null)
   const [isPreparing, setIsPreparing] = useState(false)
-  
+
   const [toast, setToast] = useState({ message: '', type: 'info' as ToastType, isVisible: false })
 
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
@@ -169,7 +169,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   // Helper: Fetch vault history from Aptos REST API (no auth needed, pagination supported)
   const fetchVaultHistory = useCallback(async () => {
     if (!walletConnected || !walletAddress) return;
-    
+
     setIsHistoryLoading(true);
     setHistoryError(null);
     debugLog("activeNetKey:", activeNetKey);
@@ -177,22 +177,22 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     try {
       const indexerUrl = ACTIVE_NET.shelbyIndexer;
       const apiKey = activeNetKey === 'testnet' ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      
+
       if (!indexerUrl || !apiKey) return;
 
       const data = await fetchBlobsFromGraphQL(indexerUrl, apiKey, walletAddress);
       debugLog("GRAPHQL BLOBS DEBUG:", JSON.stringify(data, null, 2));
-      
+
       const blobs = data?.data?.blobs || [];
       if (blobs) {
         const mappedFiles: StoredFile[] = blobs.map((item: any, idx: number) => {
           // Parse blob_name to get clean filename (handle potential path prefixes)
           const rawName = item.blob_name || "";
           const cleanName = rawName.split("/").pop() || `Blob ${idx + 1}`;
-          
+
           const dotIndex = cleanName.lastIndexOf('.');
           const ext = dotIndex !== -1 ? cleanName.slice(dotIndex + 1).toUpperCase() : "TXT";
-          
+
           return {
             id: idx + 1, // Use loop index for UI consistency as "id" is not in schema
             name: cleanName,
@@ -206,7 +206,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
             // Strip @owner/ prefix for SDK deletion operations (required for exact match)
             blobNameSuffix: (item.blob_name || "").replace(/^@[^/]+\//, ""),
             // Try to retrieve blobId from local storage (uploaded via this browser)
-            blobId: localStorage.getItem(`shelby_id_${walletAddress}_${item.blob_name}`) || undefined 
+            blobId: localStorage.getItem(`shelby_id_${walletAddress}_${item.blob_name}`) || undefined
           };
         });
         setFiles(mappedFiles);
@@ -226,12 +226,12 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     try {
       const indexerUrl = ACTIVE_NET.shelbyIndexer;
       const apiKey = activeNetKey === 'testnet' ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
-      
+
       if (!indexerUrl || !apiKey) return;
 
       const data = await fetchRecentActivitiesFromGraphQL(indexerUrl, apiKey, 5);
       debugLog("GRAPHQL ACTIVITIES DEBUG:", JSON.stringify(data, null, 2));
-      
+
       const blobs = data?.data?.blobs;
       if (blobs) {
         blobs.forEach((item: any, idx: number) => {
@@ -369,10 +369,10 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
           if (attempts > 10) clearInterval(interval); // give up after 5 seconds
         }
       } else {
-         clearInterval(interval);
+        clearInterval(interval);
       }
     };
-    
+
     interval = setInterval(autoConnectMartian, 500);
     return () => clearInterval(interval);
   }, []);
@@ -429,7 +429,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         setManualWalletId(null);
         try {
           await connect(walletName as any);
-          
+
           // Delay lebih panjang (800ms) untuk memberi waktu Petra memproses popup
           await new Promise(resolve => setTimeout(resolve, 800));
 
@@ -556,7 +556,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
   const handleFilesSelected = (newFiles: FileList) => {
     setUploadLogs([]);
     addLog('INIT', `Selected ${newFiles.length} file(s) for upload.`);
-    
+
     const items: UploadQueueItem[] = Array.from(newFiles).map(file => ({
       file,
       permission: defaultPerm.type,
@@ -586,7 +586,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
       try {
         const message = "Authorize ShelbyOS to encrypt your files. This signature will be used to derive your local encryption key.";
         const nonce = Date.now().toString();
-        
+
         let sig: any = null;
         if (signMessage) {
           const response = await signMessage({ message, nonce });
@@ -601,7 +601,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         } else {
           throw new Error("signMessage not supported by this wallet");
         }
-        
+
         if (!sig) throw new Error("Failed to obtain signature.");
         setEncryptionSignature(sig);
         addLog('DONE', 'Signature secured. Click UPLOAD again to proceed.');
@@ -631,19 +631,19 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         try {
           // Update status to 'preparing' locally in UI
           setUploadQueue(prev => prev.map(qItem => qItem.file === item.file ? { ...qItem, status: 'preparing' } : qItem));
-          
+
           let currentFile = item.file;
           if (encryptEnabled && encryptionSignature) {
             currentFile = await encryptFileWithSignature(currentFile, encryptionSignature);
             addLog('LOCK', `Encrypted: ${item.file.name} -> ${currentFile.name}`);
           }
-          
+
           const buffer = new Uint8Array(await currentFile.arrayBuffer());
           setOverallProgress(20 + Math.floor(((idx + 1) / uploadQueue.length) * 40));
-          
+
           // Mark as ready (internally)
           setUploadQueue(prev => prev.map(qItem => qItem.file === item.file ? { ...qItem, status: 'ready' } : qItem));
-          
+
           return {
             blobName: currentFile.name,
             blobData: buffer
@@ -656,7 +656,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
       setStatusLine('Waiting for wallet approval...');
       setOverallProgress(70);
-      
+
       const signer = (window as any).martian?.selectedAccount ? {
         account: (window as any).martian.selectedAccount,
         signAndSubmitTransaction: (window as any).martian.signAndSubmitTransaction
@@ -706,7 +706,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
       const encodedName = encodeURIComponent(cleanName).replace(/%2F/g, '/');
       const blobUrl = `${shelbyRpc}/v1/blobs/${walletAddress}/${encodedName}`;
-      
+
       const headers: Record<string, string> = {
         "Content-Type": "application/json"
       };
@@ -760,8 +760,8 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     if (f.previewUrl) { _openPreviewModal(f); return; }
 
     // Determine the correct image/video type first — only fetch for visual types
-    const IMAGE_EXTS = ['PNG','JPG','JPEG','GIF','SVG','WEBP','BMP','ICO'];
-    const VIDEO_EXTS = ['MP4','WEBM','OGG','MOV'];
+    const IMAGE_EXTS = ['PNG', 'JPG', 'JPEG', 'GIF', 'SVG', 'WEBP', 'BMP', 'ICO'];
+    const VIDEO_EXTS = ['MP4', 'WEBM', 'OGG', 'MOV'];
     const extUp = f.ext.toUpperCase();
     const isVisual = IMAGE_EXTS.includes(extUp) || VIDEO_EXTS.includes(extUp);
 
@@ -859,8 +859,8 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) return;
     const isShelbyNet = activeNetKey === "shelbynet";
-    const explorerBase = isShelbyNet 
-      ? 'https://explorer.shelby.xyz/shelbynet/account' 
+    const explorerBase = isShelbyNet
+      ? 'https://explorer.shelby.xyz/shelbynet/account'
       : 'https://explorer.shelby.xyz/testnet/account';
     const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
     window.open(url, '_blank', 'noopener');
@@ -871,8 +871,8 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
     const f = files.find(s => s.id === id);
     if (!f || !walletAddress) return;
     const isShelbyNet = activeNetKey === "shelbynet";
-    const explorerBase = isShelbyNet 
-      ? 'https://explorer.shelby.xyz/shelbynet/account' 
+    const explorerBase = isShelbyNet
+      ? 'https://explorer.shelby.xyz/shelbynet/account'
       : 'https://explorer.shelby.xyz/testnet/account';
     const url = `${explorerBase}/${walletAddress}/blobs?name=${encodeURIComponent(f.name)}`;
     navigator.clipboard.writeText(url).then(() => showToast('Explorer link copied ✓', 'success'));
@@ -886,12 +886,12 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
   // 🛡️ Global UI Safety Guards
   if (showIntro) {
-    return <Intro 
-      onComplete={() => setShowIntro(false)} 
+    return <Intro
+      onComplete={() => setShowIntro(false)}
       walletConnected={walletConnected}
       activeNetName={ACTIVE_NET.label}
       rpcUrl={ACTIVE_NET.aptosRpc}
-      fetchVaultHistory={fetchVaultHistory} 
+      fetchVaultHistory={fetchVaultHistory}
     />;
   }
 
@@ -923,34 +923,34 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
 
   // Defensive render guard
   return (
-      <div className="app-container">
-        <Navbar 
-          activeNetwork={activeNetKey}
-          onNetworkChange={(net) => {
-            setActiveNetKey(net as any);
-            showToast(`Switched to ${NETWORKS[net as keyof typeof NETWORKS]?.label || net}`);
-          }}
-          onThemeChange={(newTheme) => {
-            setTheme(newTheme);
-            showToast(`Theme switched to ${newTheme.replace('theme-', '').toUpperCase()}`);
-          }}
-          walletConnected={walletConnected}
-          address={walletAddress}
-          aptBalance={aptBalance}
-          shelbyBalance={shelbyBalance}
-          onRefresh={handleRefreshBalances}
-          onConnectWallet={() => {
-            if (walletConnected) {
-              handleWalletDisconnect();
-            } else {
-              setIsWalletModalOpen(true);
-            }
-          }}
-        />
-        <main className="layout-wrapper">
-          <div className="layout">
+    <div className="app-container">
+      <Navbar
+        activeNetwork={activeNetKey}
+        onNetworkChange={(net) => {
+          setActiveNetKey(net as any);
+          showToast(`Switched to ${NETWORKS[net as keyof typeof NETWORKS]?.label || net}`);
+        }}
+        onThemeChange={(newTheme) => {
+          setTheme(newTheme);
+          showToast(`Theme switched to ${newTheme.replace('theme-', '').toUpperCase()}`);
+        }}
+        walletConnected={walletConnected}
+        address={walletAddress}
+        aptBalance={aptBalance}
+        shelbyBalance={shelbyBalance}
+        onRefresh={handleRefreshBalances}
+        onConnectWallet={() => {
+          if (walletConnected) {
+            handleWalletDisconnect();
+          } else {
+            setIsWalletModalOpen(true);
+          }
+        }}
+      />
+      <main className="layout-wrapper">
+        <div className="layout">
           <div className="sidebar-col">
-            <UploadPanel 
+            <UploadPanel
               walletConnected={walletConnected}
               isUploading={isUploading}
               uploadProgress={overallProgress}
@@ -966,14 +966,14 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
               isPreparing={isPreparing}
               hasEncryptionKey={!!encryptionSignature}
             />
-            
+
             <div className="window animate-entry delay-3 action-panel-mobile" style={{ marginTop: '10px' }}>
               <div className="titlebar">
                 <span>🛠️ Actions</span>
               </div>
               <div className="window-body" style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <button 
-                  className="btn95 action-mobile-btn" 
+                <button
+                  className="btn95 action-mobile-btn"
                   style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                   onClick={() => {
                     setEditingPermIndex(null);
@@ -983,8 +983,8 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
                   ⚙️ Permission Defaults
                 </button>
 
-                <button 
-                  className="btn95 action-mobile-btn" 
+                <button
+                  className="btn95 action-mobile-btn"
                   style={{ width: '100%', fontSize: '12px', padding: '6px 8px' }}
                   onClick={async () => {
                     await fetchVaultHistory();
@@ -1020,7 +1020,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
             onPermissionChange={(id, newConfig) => {
               // Update local state so UI reflects change immediately
               setFiles(prev => prev.map(f => f.id === id ? { ...f, permConfig: newConfig, vis: newConfig.type } : f));
-              
+
               // Persist to localStorage
               const file = files.find(f => f.id === id);
               if (file && walletAddress) {
@@ -1032,7 +1032,7 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         </div>
       </main>
 
-      <StatusBar 
+      <StatusBar
         fileCount={files?.length || 0}
         totalSize={formatFileSize((files ?? []).reduce((a, b) => a + Number(b.size || 0), 0))}
         walletStatus={walletConnected ? (String(walletAddress).slice(0, 6) + '...' + String(walletAddress).slice(-4)) : 'Not Connected'}
@@ -1040,76 +1040,76 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         rpcStatus={rpcStatus}
       />
 
-        <WalletModal 
-          isOpen={isWalletModalOpen}
-          onClose={() => !isConnecting && setIsWalletModalOpen(false)}
-          onSelectWallet={handleWalletSelect}
-          isConnecting={isConnecting}
-        />
+      <WalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => !isConnecting && setIsWalletModalOpen(false)}
+        onSelectWallet={handleWalletSelect}
+        isConnecting={isConnecting}
+      />
 
-        <PermissionModal 
-          isOpen={isPermModalOpen}
-          onClose={() => {
-            setIsPermModalOpen(false);
-            setEditingPermIndex(null);
-            setEditingFileId(null);
-          }}
-          onApply={handleApplyPermissions}
-          initialConfig={
-            (editingFileId !== null) 
-              ? files.find(f => f.id === editingFileId)?.permConfig 
-              : (editingPermIndex !== null && uploadQueue[editingPermIndex]) 
-                ? uploadQueue[editingPermIndex].permConfig 
-                : defaultPerm
-          }
-        />
-
-
+      <PermissionModal
+        isOpen={isPermModalOpen}
+        onClose={() => {
+          setIsPermModalOpen(false);
+          setEditingPermIndex(null);
+          setEditingFileId(null);
+        }}
+        onApply={handleApplyPermissions}
+        initialConfig={
+          (editingFileId !== null)
+            ? files.find(f => f.id === editingFileId)?.permConfig
+            : (editingPermIndex !== null && uploadQueue[editingPermIndex])
+              ? uploadQueue[editingPermIndex].permConfig
+              : defaultPerm
+        }
+      />
 
 
 
-        <FileDetailModal 
-          isOpen={isDetailModalOpen}
-          onClose={() => setIsDetailModalOpen(false)}
-          title="File Details"
-          cid={selectedFile?.cid || ''}
-          link={selectedFile?.cid ? `https://explorer.shelby.xyz/blob/${selectedFile.cid}` : ''}
-          dateLabel={selectedFile ? `Uploaded on ${selectedFile.date} at ${selectedFile.time}` : ''}
-          onCopyCid={() => showToast('CID copied', 'success')}
-          onCopyLink={() => showToast('Link copied', 'success')}
-        />
 
-        <FilePreviewModal
-          isOpen={isPreviewModalOpen}
-          onClose={() => setIsPreviewModalOpen(false)}
-          file={selectedFile}
-          shelbyRpcUrl={ACTIVE_NET.shelbyRpc}
-          ownerAddress={walletAddress}
-          onDownload={() => selectedFile && handleDownloadFile(selectedFile.id)}
-        />
 
-        <AccessDeniedModal 
-          isOpen={isAccessDeniedOpen}
-          onClose={() => setIsAccessDeniedOpen(false)}
-          message={accessDeniedMsg}
-          confirmText={accessDeniedAction?.label}
-          onConfirm={accessDeniedAction?.fn}
-        />
+      <FileDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        title="File Details"
+        cid={selectedFile?.cid || ''}
+        link={selectedFile?.cid ? `https://explorer.shelby.xyz/blob/${selectedFile.cid}` : ''}
+        dateLabel={selectedFile ? `Uploaded on ${selectedFile.date} at ${selectedFile.time}` : ''}
+        onCopyCid={() => showToast('CID copied', 'success')}
+        onCopyLink={() => showToast('Link copied', 'success')}
+      />
 
-        <UploadTerminal 
-          isVisible={showTerminal} 
-          logs={uploadLogs} 
-          onClose={() => setShowTerminal(false)} 
-        />
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
+        file={selectedFile}
+        shelbyRpcUrl={ACTIVE_NET.shelbyRpc}
+        ownerAddress={walletAddress}
+        onDownload={() => selectedFile && handleDownloadFile(selectedFile.id)}
+      />
 
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          isVisible={toast.isVisible} 
-          onClose={() => setToast(prev => ({ ...prev, isVisible: false }))} 
-        />
-      </div>
-    );
+      <AccessDeniedModal
+        isOpen={isAccessDeniedOpen}
+        onClose={() => setIsAccessDeniedOpen(false)}
+        message={accessDeniedMsg}
+        confirmText={accessDeniedAction?.label}
+        onConfirm={accessDeniedAction?.fn}
+      />
+
+      <UploadTerminal
+        isVisible={showTerminal}
+        logs={uploadLogs}
+        onClose={() => setShowTerminal(false)}
+      />
+
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
+      />
+    </div>
+  );
 }
 
 // Provider Wrapper
@@ -1119,19 +1119,19 @@ export default function App() {
   const ACTIVE_NET = NETWORKS[activeNetKey] || NETWORKS.testnet;
 
   const shelbyClient = useMemo(() => {
-    const apiKey = activeNetKey === 'testnet' 
-      ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET 
+    const apiKey = activeNetKey === 'testnet'
+      ? import.meta.env.VITE_SHELBY_API_KEY_TESTNET
       : import.meta.env.VITE_SHELBY_API_KEY_SHELBYNET;
 
-    const settings: AptosSettings = { 
-      network: ACTIVE_NET.network, 
-      fullnode: ACTIVE_NET.aptosRpc 
+    const settings: AptosSettings = {
+      network: ACTIVE_NET.network,
+      fullnode: ACTIVE_NET.aptosRpc
     };
 
-    return new ShelbyClient({ 
-      network: ACTIVE_NET.network as any, 
+    return new ShelbyClient({
+      network: ACTIVE_NET.network as any,
       aptos: settings,
-      indexer: { 
+      indexer: {
         baseUrl: ACTIVE_NET.shelbyIndexer,
         apiKey
       },
@@ -1142,8 +1142,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ShelbyClientProvider client={shelbyClient}>
-        <ShelbyOS 
-          activeNetKey={activeNetKey} 
+        <ShelbyOS
+          activeNetKey={activeNetKey}
           setActiveNetKey={setActiveNetKey}
           theme={theme}
           setTheme={setTheme}
