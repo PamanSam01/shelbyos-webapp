@@ -410,8 +410,59 @@ function ShelbyOS({ activeNetKey, setActiveNetKey, theme, setTheme }: {
         } else {
           showToast('Martian: no address returned', 'error');
         }
+      } else if (walletName === 'Petra') {
+        // Special check for Petra (handling delay on small screens)
+        let aptosWindow = (window as any).aptos;
+        if (!aptosWindow) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            aptosWindow = (window as any).aptos;
+            if (aptosWindow) break;
+          }
+        }
+
+        if (!aptosWindow) {
+          showToast('Petra wallet not detected. Please install or wait.', 'error');
+          return;
+        }
+
+        setManualWalletId(null);
+        try {
+          await connect(walletName as any);
+          
+          // Delay lebih panjang (800ms) untuk memberi waktu Petra memproses popup
+          await new Promise(resolve => setTimeout(resolve, 800));
+
+          // Retry mengecek account?.address dari adapter selama ~2.5 detik
+          let hasAddress = !!account?.address;
+          if (!hasAddress) {
+            for (let i = 0; i < 5; i++) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+              if (account?.address) {
+                hasAddress = true;
+                break;
+              }
+            }
+          }
+
+          if (!hasAddress) {
+            // JANGAN disconnect, JANGAN tampilkan error
+            // Asumsikan popup masih terbuka dan menunggu user approve
+            showToast('Waiting for Petra wallet confirmation...', 'info');
+            return;
+          }
+
+          showToast(`${walletName} connected ✓`, 'success');
+        } catch (connErr: any) {
+          const msg: string = connErr?.message || String(connErr);
+          if (msg.includes('rejected') || msg.includes('cancel') || msg.includes('User denied')) {
+            showToast('Connection cancelled', 'info');
+          } else {
+            showToast(`Connection failed: ${msg.slice(0, 60)}`, 'error');
+          }
+        }
       } else {
-        // Petra, Google (Keyless), etc. — standard adapter
+        // Google (Keyless), dll — standard adapter
         setManualWalletId(null);
         try {
           await connect(walletName as any);
