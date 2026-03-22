@@ -1,91 +1,199 @@
-# 🛡️ # Shelby OS
+# 🛡️ Shelby OS
 
-**The Decentralized Web3 Operating System**
+> **Decentralized Storage Desktop on Shelby Network (Testnet)**
 
-Shelby OS is a premium, decentralized web-based operating system built on top of the Aptos blockchain. It provides a familiar, retro-modern interface (inspired by Windows 95) designed to bridge the gap between traditional SaaS experiences and Web3 decentralized technologies. 
+Shelby OS is a browser-based Web3 desktop interface built on Shelby Network (Aptos Testnet).
+Inspired by a retro-modern Windows 95 design, Shelby OS delivers a familiar desktop-like experience directly in the browser — fully integrated with blockchain technology.
 
-With a strong focus on security, privacy, and seamless user experience, Shelby OS acts as your decentralized vault, allowing you to store, manage, and encrypt files entirely on-chain.
+Shelby OS functions as a **fully on-chain decentralized storage system**, where files, metadata, and permissions are managed directly on a decentralized network.
 
 ---
 
-## 🌟 Key Features
+## 🖥️ Overview
 
-*   **Decentralized Vault Storage**: Upload and manage files directly on decentralized storage protocols (Irys/Arweave/IPFS) without relying on centralized servers.
-*   **Military-Grade Encrypted Storage**: Advanced 2-step client-side encryption flow using AES-GCM and keys derived directly from your Aptos Wallet Signature. Your files remain completely inaccessible to anyone without your private key.
-*   **Zero-Modal Architecture**: A completely frictionless, fluid UI experience with no intrusive pop-ups or modals interrupting your workflow.
-*   **On-Chain Access Control**: Set file permissions to Public, Private (Allowlist), or Purchasable. Smart contract level integrations handle access rights.
-*   **Mobile-First & Fully Responsive**: Impeccable UI scaling across desktop, tablet, and mobile devices without overflowing layouts or broken components. 
-*   **Live On-Chain Boot Sequence**: A dynamic startup sequence that fetches real network latency (`getLedgerInfo`), block heights, and wallet adapter states asynchronously.
+Shelby OS provides a desktop-like experience inside your browser:
+
+* File upload panel
+* ShelbyVault (file manager)
+* Permission system
+* Wallet-based authentication
+* Retro desktop UI
+
+---
+
+## 🌟 Core Features
+
+### 📦 Fully On-Chain Storage
+
+* Upload files directly to Shelby Network (Testnet)
+* No reliance on centralized servers
+* File metadata and status are stored on-chain
+
+---
+
+### 🔐 Encryption System (Active)
+
+* AES-GCM client-side encryption
+* Keys derived from wallet signatures
+* Files can be encrypted before upload
+
+> ⚠️ Decryption system is currently under development
+
+---
+
+### 🔌 Wallet Integration
+
+* Aptos Wallet Adapter
+* Supported wallets:
+
+  * Petra Wallet
+  * Martian Wallet
+  * Google (Keyless)
+
+---
+
+### 📂 ShelbyVault (File Manager)
+
+* Upload history table
+* File statuses:
+
+  * ENCRYPTED
+  * STORED
+* Action system:
+
+  * Preview
+  * Copy link
+  * Download
+  * Delete
+* Pagination and filtering
+
+---
+
+### 🔐 On-Chain Permission System
+
+* Public access
+* Allowlist (wallet-based)
+* Time lock
+* Purchasable access
+
+> All permissions are controlled through on-chain logic
+
+---
+
+### 📱 Responsive Desktop UI
+
+* Desktop
+* Laptop (including smaller screens)
+* Mobile
+
+---
+
+## 📊 Current Status
+
+> **Testnet Phase (Fully Functional Core)**
+
+### ✅ Completed
+
+* Wallet connection (Petra, Martian)
+* Fully on-chain file upload
+* File storage and status tracking
+* Encryption before upload
+* On-chain permission system
+* ShelbyVault file management UI
+
+### 🚧 In Progress
+
+* Decryption system (client-side unlock)
+* Advanced file preview
+* Performance optimization
 
 ---
 
 ## 🛠 Tech Stack
 
-**Frontend & Architecture**
-*   **Framework**: React.js & Vite
-*   **Language**: TypeScript
-*   **Styling**: Vanilla CSS (Modular, Retro-Modern Themes)
-*   **State Management**: React Hooks & TanStack Query
+### Frontend
 
-**Web3 & Decentralization**
-*   **Blockchain**: Aptos Network (Mainnet, Testnet, ShelbyNet)
-*   **Wallet Integration**: Aptos Wallet Adapter (Supports Martian, Petra, etc.)
-*   **Indexed Data**: Aptos GraphQL Indexer
-*   **Cryptography**: Web Crypto API (AES-GCM for End-to-End Encryption)
-*   **SDK**: `@shelby-protocol/react`, `@shelby-protocol/sdk`
+* React.js + Vite
+* TypeScript
+* Vanilla CSS (Windows 95-style UI)
+* React Hooks
+
+### Web3
+
+* Aptos Testnet / Shelby Network
+* Aptos Wallet Adapter
+* Web Crypto API (AES-GCM)
+
+### SDK
+
+* `@shelby-protocol/react`
+* `@shelby-protocol/sdk`
 
 ---
 
 ## 🚀 Getting Started
 
-Follow these steps to run Shelby OS locally on your machine.
-
 ### Prerequisites
-*   Node.js (v18 or higher)
-*   npm or yarn
-*   An Aptos-compatible Wallet browser extension (e.g., Martian Wallet)
+
+* Node.js v18+
+* npm / yarn
+* Aptos Wallet (Petra / Martian)
+
+---
 
 ### Installation
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/shelbyos-app.git
-    cd shelbyos-app
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-
-3.  **Configure Environment Variables:**
-    Create a `.env` file in the root directory and add the necessary API keys or parameters for the network indexers (if required):
-    ```env
-    VITE_SHELBY_API_KEY_TESTNET=your_api_key_here
-    VITE_SHELBY_API_KEY_SHELBYNET=your_api_key_here
-    ```
-
-4.  **Run the development server:**
-    ```bash
-    npm run dev
-    ```
-
-5.  **Open the application:**
-    Navigate to `http://localhost:5173` in your browser.
+```bash id="g7m4yk"
+git clone https://github.com/your-username/shelbyos-app.git
+cd shelbyos-app
+npm install
+npm run dev
+```
 
 ---
 
-## 📊 Project Status
+### Environment
 
-**Status: Production-Ready (Beta)**
-
-The core infrastructure, including wallet integration, on-chain reading/writing, and end-to-end payload encryption, is fully functional and vetted. The application is highly stable across different viewports and is currently in its final beta phase leading up to the public mainnet release.
-
----
-*Created by [0xPamanSam](https://x.com/MrSamweb3)*
-
-
-*“The future of the decentralized web, delivered in a premium interface.”*
+```env id="9g8kqz"
+VITE_SHELBY_API_KEY_TESTNET=your_api_key_here
+VITE_SHELBY_API_KEY_SHELBYNET=your_api_key_here
+```
 
 ---
-© 2026 Shelby Systems Corp. All rights reserved.
+
+### Run
+
+```bash id="4d4z1t"
+npm run dev
+```
+
+Open:
+
+```
+http://localhost:5173
+```
+
+---
+
+## 🧩 Roadmap
+
+* 🔓 Decryption system (unlock encrypted files)
+* 🧠 Smart file preview system
+* ⚡ Performance optimization
+* 🌐 Mainnet deployment
+
+---
+
+## 👨‍💻 Author
+
+**0xPamanSam**
+🔗 https://x.com/MrSamweb3
+
+---
+
+## ⚠️ Disclaimer
+
+This project is currently running on **Shelby Network (Testnet)**.
+All core features are fully functional on-chain, but additional features such as decryption are still under development.
+
+Use for testing and exploration purposes only.
